@@ -4,6 +4,6 @@
     { "source": "/api/(.*)", "destination": "/api/index" }
   ],
   "functions": {
-    "api/index.js": { "includeFiles": "public/**", "maxDuration": 30 }
+    "api/index.js": { "includeFiles": "web/**", "maxDuration": 30 }
   }
 }

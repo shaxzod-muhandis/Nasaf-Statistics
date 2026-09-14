@@ -16,7 +16,7 @@ const app = express();
 app.use(express.json());
 
 function sendIndexHtml(res) {
-  const indexPath = path.join(process.cwd(), "public", "index.html");
+  const indexPath = path.join(process.cwd(), "web", "index.html");
   try {
     const html = fs.readFileSync(indexPath, "utf8");
     res.setHeader("Content-Type", "text/html; charset=utf-8");
