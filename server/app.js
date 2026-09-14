@@ -1,0 +1,45 @@
+// ═══════════════════════════════════════════════════════════════════════
+// Devor ekrani — Express ilovasi. Asosiy Tracker loyihasidagi single-
+// function Vercel konventsiyasi bilan bir xil (bitta funksiya, bitta
+// rewrite — bu sessiyada Vercel'ning ko'p-segmentli /api/* yo'llarni
+// buzadigan xatosi shu tarzda oldini olingan edi, shuning uchun bu yerda
+// ham boshidanoq bitta funksiya saqlanadi).
+// ═══════════════════════════════════════════════════════════════════════
+
+const path = require("path");
+const fs = require("fs");
+const express = require("express");
+const { requestCode, verifyCode, requireAuth } = require("./lib/auth");
+const { getWallStats } = require("./lib/stats");
+
+const app = express();
+app.use(express.json());
+
+function sendIndexHtml(res) {
+  const indexPath = path.join(process.cwd(), "public", "index.html");
+  try {
+    const html = fs.readFileSync(indexPath, "utf8");
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    res.send(html);
+  } catch (e) {
+    res.status(500).json({ error: "Sahifa topilmadi", detail: e.message });
+  }
+}
+
+app.get("/", (req, res) => sendIndexHtml(res));
+
+app.post("/api/auth/request-code", requestCode);
+app.post("/api/auth/verify-code", verifyCode);
+
+app.get("/api/stats", requireAuth, async (req, res) => {
+  try {
+    const stats = await getWallStats();
+    res.json(stats);
+  } catch (e) {
+    console.error("Stats xatosi:", e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+module.exports = app;

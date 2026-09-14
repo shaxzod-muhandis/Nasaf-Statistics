@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nasaf Digital · Devor ekrani</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { background: #EEF0F3; font-family: Sora, system-ui, sans-serif; overflow: hidden; }
+  a { color: #2f7ab9; text-decoration: none; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
+  /* ── Login ── */
+  #login-screen {
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  }
+  .login-card {
+    width: 380px; background: #fff; border-radius: 20px; padding: 36px 32px;
+    border: 1px solid rgba(15,23,42,.09); box-shadow: 0 20px 50px rgba(15,23,42,.08);
+  }
+  .login-logo {
+    width: 52px; height: 52px; border-radius: 14px; background: #2f7ab9; color: #fff;
+    display: flex; align-items: center; justify-content: center; font: 600 18px Sora, sans-serif;
+    margin-bottom: 18px;
+  }
+  .login-title { font: 600 22px Sora, sans-serif; color: #0f172a; letter-spacing: -.02em; }
+  .login-sub { font: 400 15px Sora, sans-serif; color: #6B7280; margin-top: 6px; margin-bottom: 24px; }
+  .login-label { font: 500 13px Sora, sans-serif; color: #374151; display: block; margin-bottom: 7px; }
+  .login-input {
+    width: 100%; height: 46px; border-radius: 11px; border: 1px solid rgba(15,23,42,.15);
+    padding: 0 14px; font: 500 17px Sora, sans-serif; color: #0f172a; letter-spacing: .02em;
+    outline: none; background: #FAFBFC;
+  }
+  .login-input:focus { border-color: #2f7ab9; background: #fff; }
+  .login-btn {
+    width: 100%; height: 46px; border-radius: 11px; border: none; background: #2f7ab9; color: #fff;
+    font: 600 16px Sora, sans-serif; cursor: pointer; margin-top: 18px;
+  }
+  .login-btn:disabled { opacity: .55; cursor: default; }
+  .login-btn.secondary { background: none; color: #2f7ab9; font-weight: 500; height: 36px; margin-top: 10px; }
+  .login-error { color: #dc2626; font: 500 14px Sora, sans-serif; margin-top: 12px; min-height: 18px; }
+  .login-hint { color: #9AA1AC; font: 400 13px Sora, sans-serif; margin-top: 14px; text-align: center; }
+
+  /* ── Dashboard (design'dan) ── */
+  #dashboard-screen { display: none; height: 100vh; }
+  .act-lvl-ahead { background: #16a34a; }
+  .act-lvl-onTrack { background: #2f7ab9; }
+  .act-lvl-behind { background: #d97706; }
+  .act-lvl-debt { background: #dc2626; }
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">ND</div>
+    <div class="login-title">Devor ekrani</div>
+    <div class="login-sub" id="login-sub">Telefon raqamingizni kiriting — Telegram botga tasdiqlash kodi yuboriladi.</div>
+
+    <div id="phone-step">
+      <label class="login-label" for="phone-input">Telefon raqam</label>
+      <input class="login-input" id="phone-input" type="tel" placeholder="+998 90 123 45 67" autocomplete="tel">
+      <button class="login-btn" id="request-code-btn">Kod yuborish</button>
+    </div>
+
+    <div id="code-step" style="display:none">
+      <label class="login-label" for="code-input">Tasdiqlash kodi</label>
+      <input class="login-input" id="code-input" type="text" inputmode="numeric" maxlength="6" placeholder="••••••" autocomplete="one-time-code" style="letter-spacing:.3em;text-align:center">
+      <button class="login-btn" id="verify-code-btn">Tasdiqlash</button>
+      <button class="login-btn secondary" id="resend-code-btn">Kodni qayta yuborish</button>
+    </div>
+
+    <div class="login-error" id="login-error"></div>
+    <div class="login-hint">Faqat ro'yxatdan o'tgan xodimlar kira oladi.</div>
+  </div>
+</div>
+
+<div id="dashboard-screen">
+  <div style="width:100%;height:100%;background:#F4F6F8;display:flex;flex-direction:column;overflow:hidden">
+
+    <div style="height:92px;background:#fff;border-bottom:1px solid rgba(15,23,42,.1);display:flex;align-items:center;padding:0 40px;gap:30px;flex:none">
+      <div style="width:56px;height:56px;border-radius:16px;background:#2f7ab9;color:#fff;display:flex;align-items:center;justify-content:center;font:600 20px Sora,sans-serif;letter-spacing:-.01em">ND</div>
+      <div>
+        <div style="font:600 25px Sora,sans-serif;color:#0f172a;letter-spacing:-.02em">Nasaf Digital · Kontent paneli</div>
+        <div id="cycle-label" style="font:400 16px Sora,sans-serif;color:#4B5563;margin-top:4px"></div>
+      </div>
+      <div style="flex:1"></div>
+      <div style="display:flex;align-items:center;gap:26px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="width:9px;height:9px;border-radius:99px;background:#16a34a;animation:pulse 2.4s ease-in-out infinite"></div>
+          <div id="updated-label" style="font:500 17px Sora,sans-serif;color:#6B7280"></div>
+        </div>
+        <div style="width:1px;height:38px;background:rgba(15,23,42,.12)"></div>
+        <div style="text-align:right">
+          <div id="clock" style="font:600 26px Sora,sans-serif;color:#0f172a;letter-spacing:-.02em;font-variant-numeric:tabular-nums"></div>
+          <div id="clock-date" style="font:400 18px Sora,sans-serif;color:#6B7280;margin-top:3px"></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="flex:1;display:flex;flex-direction:column;gap:22px;padding:24px 40px 28px;overflow:hidden">
+      <div style="flex:1;display:grid;grid-template-columns:1fr 500px;gap:22px;overflow:hidden">
+
+        <div style="background:#fff;border:1px solid rgba(15,23,42,.09);border-radius:20px;display:flex;flex-direction:column;overflow:hidden">
+          <div style="padding:20px 26px;border-bottom:1px solid rgba(15,23,42,.08);display:flex;align-items:center;gap:20px;flex:none">
+            <div style="font:600 21px Sora,sans-serif;color:#0f172a;letter-spacing:-.02em">Loyihalar</div>
+            <div id="projects-count-label" style="font:400 16px Sora,sans-serif;color:#9AA1AC"></div>
+            <div style="flex:1"></div>
+            <div style="display:flex;align-items:center;gap:20px">
+              <div style="display:flex;align-items:center;gap:8px"><div style="width:11px;height:11px;border-radius:4px;background:#16a34a"></div><div style="font:500 17px Sora,sans-serif;color:#374151">Oldinda</div></div>
+              <div style="display:flex;align-items:center;gap:8px"><div style="width:11px;height:11px;border-radius:4px;background:#2f7ab9"></div><div style="font:500 17px Sora,sans-serif;color:#374151">Rejada</div></div>
+              <div style="display:flex;align-items:center;gap:8px"><div style="width:11px;height:11px;border-radius:4px;background:#d97706"></div><div style="font:500 17px Sora,sans-serif;color:#374151">Ortda</div></div>
+              <div style="display:flex;align-items:center;gap:8px"><div style="width:11px;height:11px;border-radius:4px;background:#dc2626"></div><div style="font:500 17px Sora,sans-serif;color:#374151">Qarz</div></div>
+            </div>
+          </div>
+          <div id="projects-grid" style="flex:1;display:grid;grid-template-columns:1fr 1fr 1fr;grid-auto-rows:1fr;gap:16px;padding:18px;overflow:hidden"></div>
+        </div>
+
+        <div style="background:#fff;border:1px solid rgba(15,23,42,.09);border-radius:20px;display:flex;flex-direction:column;overflow:hidden">
+          <div style="padding:20px 24px;border-bottom:1px solid rgba(15,23,42,.08);display:flex;align-items:baseline;gap:12px;flex:none">
+            <div style="font:600 21px Sora,sans-serif;color:#0f172a;letter-spacing:-.02em">Xodimlar</div>
+            <div style="flex:1"></div>
+            <div style="font:400 18px Sora,sans-serif;color:#6B7280">bajarildi · qoldi</div>
+          </div>
+          <div id="employees-list" style="flex:1;display:flex;flex-direction:column;overflow:hidden"></div>
+        </div>
+
+      </div>
+
+      <div style="height:250px;display:grid;grid-template-columns:480px 1fr 1fr;gap:22px;flex:none">
+
+        <div style="background:#0f172a;border-radius:20px;padding:22px 24px;display:flex;flex-direction:column;overflow:hidden">
+          <div style="display:flex;align-items:center;gap:12px;padding-bottom:16px;flex:none">
+            <div style="width:9px;height:9px;border-radius:99px;background:#16a34a;animation:pulse 2.4s ease-in-out infinite;flex:none"></div>
+            <div style="font:600 14px Sora,sans-serif;color:#fff;letter-spacing:.09em;text-transform:uppercase">Bugun bajarildi</div>
+            <div style="flex:1"></div>
+            <div id="today-count-badge" style="font:600 30px/1 Sora,sans-serif;color:#fff;letter-spacing:-.02em;font-variant-numeric:tabular-nums"></div>
+          </div>
+          <div id="today-feed" style="flex:1;display:flex;flex-direction:column;overflow:hidden"></div>
+        </div>
+
+        <div style="background:#fff;border:1px solid rgba(15,23,42,.09);border-radius:20px;padding:22px 24px;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:16px">
+          <div style="display:flex;flex-direction:column;justify-content:center">
+            <div style="font:500 16px Sora,sans-serif;color:#6B7280;letter-spacing:.05em;text-transform:uppercase">Jamoada bajarildi</div>
+            <div style="display:flex;align-items:baseline;gap:9px;margin-top:8px">
+              <div id="team-done" style="font:600 38px/1 Sora,sans-serif;color:#0f172a;letter-spacing:-.03em;font-variant-numeric:tabular-nums"></div>
+              <div id="team-target" style="font:500 20px Sora,sans-serif;color:#6B7280;font-variant-numeric:tabular-nums"></div>
+            </div>
+            <div style="margin-top:11px;height:8px;border-radius:99px;background:#E7EBEF;overflow:hidden"><div id="team-done-bar" style="width:0;height:100%;background:#2f7ab9;border-radius:99px"></div></div>
+          </div>
+          <div style="display:flex;flex-direction:column;justify-content:center">
+            <div style="font:500 16px Sora,sans-serif;color:#6B7280;letter-spacing:.05em;text-transform:uppercase">O'z vaqtida</div>
+            <div id="on-time-pct" style="font:600 38px/1 Sora,sans-serif;color:#16a34a;letter-spacing:-.03em;margin-top:8px;font-variant-numeric:tabular-nums"></div>
+            <div id="on-time-prev" style="font:400 17px Sora,sans-serif;color:#6B7280;margin-top:10px"></div>
+          </div>
+          <div style="display:flex;flex-direction:column;justify-content:center">
+            <div style="font:500 16px Sora,sans-serif;color:#6B7280;letter-spacing:.05em;text-transform:uppercase">Bugun bajarildi</div>
+            <div id="today-count" style="font:600 38px/1 Sora,sans-serif;color:#0f172a;letter-spacing:-.03em;margin-top:8px;font-variant-numeric:tabular-nums"></div>
+            <div id="today-active" style="font:400 17px Sora,sans-serif;color:#6B7280;margin-top:10px"></div>
+          </div>
+          <div style="display:flex;flex-direction:column;justify-content:center">
+            <div style="font:400 14px Sora,sans-serif;color:#dc2626;letter-spacing:.05em;text-transform:uppercase">Kechikkan</div>
+            <div id="overdue-count" style="font:600 38px/1 Sora,sans-serif;color:#dc2626;letter-spacing:-.03em;margin-top:8px;font-variant-numeric:tabular-nums"></div>
+            <div id="overdue-projects" style="font:400 17px Sora,sans-serif;color:#6B7280;margin-top:10px"></div>
+          </div>
+        </div>
+
+        <div style="background:#fff;border:1px solid rgba(15,23,42,.09);border-radius:20px;padding:22px 24px;display:flex;flex-direction:column">
+          <div style="display:flex;align-items:baseline;gap:12px"><div style="font:600 18px Sora,sans-serif;color:#0f172a;letter-spacing:-.01em">Jamoa faolligi</div><div style="flex:1"></div><div style="font:400 18px Sora,sans-serif;color:#6B7280">oxirgi 14 kun</div></div>
+          <div id="activity-chart" style="flex:1;display:flex;align-items:flex-end;gap:7px;margin-top:16px"></div>
+          <div id="activity-peak" style="font:400 17px Sora,sans-serif;color:#6B7280;margin-top:14px"></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var TOKEN_KEY = "wall_token";
+  var REFRESH_MS = 60000;
+  var STATUS_COLOR = { ahead: "#16a34a", onTrack: "#2f7ab9", behind: "#d97706", debt: "#dc2626" };
+  var STATUS_BG = { ahead: "#FAFDFB", onTrack: "#FBFCFE", behind: "#FEFBF6", debt: "#FFFAFA" };
+  var WEEKDAYS = ["Yakshanba","Dushanba","Seshanba","Chorshanba","Payshanba","Juma","Shanba"];
+  var MONTHS = ["Yanvar","Fevral","Mart","Aprel","May","Iyun","Iyul","Avgust","Sentabr","Oktabr","Noyabr","Dekabr"];
+
+  function $(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]; }); }
+
+  // ── Login ──
+  var loginScreen = $("login-screen"), dashboardScreen = $("dashboard-screen");
+  var phoneStep = $("phone-step"), codeStep = $("code-step");
+  var phoneInput = $("phone-input"), codeInput = $("code-input");
+  var loginError = $("login-error"), loginSub = $("login-sub");
+  var requestBtn = $("request-code-btn"), verifyBtn = $("verify-code-btn"), resendBtn = $("resend-code-btn");
+  var resendCooldownUntil = 0;
+
+  function showError(msg) { loginError.textContent = msg || ""; }
+
+  function apiFetch(url, opts) {
+    opts = opts || {};
+    var headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
+    var token = localStorage.getItem(TOKEN_KEY);
+    if (token) headers.Authorization = "Bearer " + token;
+    return fetch(url, Object.assign({}, opts, { headers: headers }));
+  }
+
+  async function requestCode() {
+    var phone = phoneInput.value.trim();
+    if (!phone) return showError("Telefon raqamni kiriting");
+    requestBtn.disabled = true;
+    requestBtn.textContent = "Yuborilmoqda...";
+    showError("");
+    try {
+      var res = await fetch("/api/auth/request-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: phone }),
+      });
+      var data = await res.json().catch(function () { return {}; });
+      if (!res.ok) throw new Error(data.error || "Xatolik");
+      phoneStep.style.display = "none";
+      codeStep.style.display = "block";
+      loginSub.textContent = "Telegram botingizga yuborilgan 6 xonali kodni kiriting.";
+      codeInput.focus();
+      startResendCooldown();
+    } catch (e) {
+      showError(e.message);
+    }
+    requestBtn.disabled = false;
+    requestBtn.textContent = "Kod yuborish";
+  }
+
+  async function verifyCode() {
+    var phone = phoneInput.value.trim();
+    var code = codeInput.value.trim();
+    if (!/^\d{6}$/.test(code)) return showError("6 xonali kodni kiriting");
+    verifyBtn.disabled = true;
+    verifyBtn.textContent = "Tekshirilmoqda...";
+    showError("");
+    try {
+      var res = await fetch("/api/auth/verify-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: phone, code: code }),
+      });
+      var data = await res.json().catch(function () { return {}; });
+      if (!res.ok) throw new Error(data.error || "Kod noto'g'ri");
+      localStorage.setItem(TOKEN_KEY, data.token);
+      enterDashboard();
+    } catch (e) {
+      showError(e.message);
+    }
+    verifyBtn.disabled = false;
+    verifyBtn.textContent = "Tasdiqlash";
+  }
+
+  function startResendCooldown() {
+    resendCooldownUntil = Date.now() + 60000;
+    updateResendBtn();
+  }
+  function updateResendBtn() {
+    var remaining = Math.ceil((resendCooldownUntil - Date.now()) / 1000);
+    if (remaining > 0) {
+      resendBtn.disabled = true;
+      resendBtn.textContent = "Qayta yuborish (" + remaining + "s)";
+      setTimeout(updateResendBtn, 1000);
+    } else {
+      resendBtn.disabled = false;
+      resendBtn.textContent = "Kodni qayta yuborish";
+    }
+  }
+
+  requestBtn.addEventListener("click", requestCode);
+  verifyBtn.addEventListener("click", verifyCode);
+  resendBtn.addEventListener("click", requestCode);
+  phoneInput.addEventListener("keydown", function (e) { if (e.key === "Enter") requestCode(); });
+  codeInput.addEventListener("keydown", function (e) { if (e.key === "Enter") verifyCode(); });
+
+  function showLogin() {
+    localStorage.removeItem(TOKEN_KEY);
+    dashboardScreen.style.display = "none";
+    loginScreen.style.display = "flex";
+    phoneStep.style.display = "block";
+    codeStep.style.display = "none";
+    loginSub.textContent = "Telefon raqamingizni kiriting — Telegram botga tasdiqlash kodi yuboriladi.";
+    codeInput.value = "";
+    showError("");
+  }
+
+  function enterDashboard() {
+    loginScreen.style.display = "none";
+    dashboardScreen.style.display = "block";
+    tickClock();
+    setInterval(tickClock, 1000);
+    loadStats();
+    setInterval(loadStats, REFRESH_MS);
+  }
+
+  // ── Clock ──
+  var lastUpdatedAt = null;
+  function tickClock() {
+    var now = new Date();
+    $("clock").textContent = pad2(now.getHours()) + ":" + pad2(now.getMinutes());
+    $("clock-date").textContent = WEEKDAYS[now.getDay()] + ", " + now.getDate() + "-" + MONTHS[now.getMonth()].toLowerCase();
+    if (lastUpdatedAt) {
+      var mins = Math.max(0, Math.round((Date.now() - lastUpdatedAt) / 60000));
+      $("updated-label").textContent = mins === 0 ? "Hozirgina yangilandi" : mins + " daqiqa oldin yangilandi";
+    }
+  }
+  function pad2(n) { return String(n).padStart(2, "0"); }
+
+  // ── Stats render ──
+  async function loadStats() {
+    try {
+      var res = await apiFetch("/api/stats");
+      if (res.status === 401) return showLogin();
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Xatolik");
+      lastUpdatedAt = Date.now();
+      render(data);
+    } catch (e) {
+      console.error("Stats yuklashda xatolik:", e);
+    }
+  }
+
+  function render(data) {
+    $("cycle-label").textContent = data.cycleLabel || "";
+    $("projects-count-label").textContent = data.projects.length + " faol · tempo bo'yicha";
+
+    // Ustunlar soni loyihalar soniga qarab moslashadi (dizayn 6 taga
+    // mo'ljallangan edi, lekin bu sonlar vaqt o'tishi bilan o'zgaradi —
+    // qattiq 3 ustun qolsa, 6 tadan ko'p loyiha pastki qatorda kesilib
+    // qolardi).
+    var projectCols = data.projects.length > 6 ? 4 : 3;
+    $("projects-grid").style.gridTemplateColumns = "repeat(" + projectCols + ", 1fr)";
+    $("projects-grid").innerHTML = data.projects.map(projectCardHtml).join("");
+    $("employees-list").innerHTML = data.employees.map(employeeRowHtml).join("");
+    $("today-feed").innerHTML = data.todayFeed.slice(0, 6).map(feedRowHtml).join("");
+    $("today-count-badge").textContent = data.summary.todayDoneCount;
+
+    $("team-done").textContent = data.summary.teamDoneCount;
+    $("team-target").textContent = "/" + data.summary.teamTargetCount;
+    var pct = data.summary.teamTargetCount > 0 ? Math.round((data.summary.teamDoneCount / data.summary.teamTargetCount) * 100) : 0;
+    $("team-done-bar").style.width = pct + "%";
+
+    $("on-time-pct").textContent = data.summary.onTimePct == null ? "—" : data.summary.onTimePct + "%";
+    $("on-time-prev").textContent = data.summary.onTimePctPrevMonth == null ? "O'tgan oy ma'lumoti yo'q" : "O'tgan oyda " + data.summary.onTimePctPrevMonth + "%";
+
+    $("today-count").textContent = data.summary.todayDoneCount;
+    $("today-active").textContent = data.summary.todayActiveCount + " xodim ishlagan";
+
+    $("overdue-count").textContent = data.summary.overdueCount;
+    $("overdue-projects").textContent = data.summary.overdueProjectCount + " loyihada to'plangan";
+
+    renderActivityChart(data.activity14d);
+  }
+
+  function projectCardHtml(p) {
+    var color = STATUS_COLOR[p.status], bg = STATUS_BG[p.status];
+    var borderOpacity = p.status === "debt" ? "" : "34";
+    var border = p.status === "debt" ? "1.5px solid " + color : "1px solid " + color + borderOpacity;
+    var pctColor = p.status === "debt" ? color : "#0f172a";
+    return (
+      '<div style="border:' + border + ';background:' + bg + ';border-radius:16px;padding:18px 19px;display:flex;flex-direction:column">' +
+      '<div style="display:flex;align-items:center;gap:10px">' +
+      '<div style="height:26px;padding:0 10px;border-radius:7px;background:' + color + ';color:#fff;font:600 14px Sora,sans-serif;display:flex;align-items:center">' + esc(p.statusLabel) + '</div>' +
+      '<div style="flex:1"></div>' +
+      '<div style="font:500 17px Sora,sans-serif;color:' + (p.status === "debt" ? color : "#4B5563") + '">' + esc(p.daysLabel) + '</div>' +
+      '</div>' +
+      '<div style="font:600 27px Sora,sans-serif;color:#0f172a;letter-spacing:-.025em;margin-top:13px">' + esc(p.label) + '</div>' +
+      (p.contributor
+        ? '<div style="display:flex;align-items:center;gap:9px;margin-top:9px"><div style="width:28px;height:28px;border-radius:9px;background:#EDEFF2;display:flex;align-items:center;justify-content:center;font:600 12px Sora,sans-serif;color:#0f172a">' + esc(p.contributor.slice(0, 1)) + '</div><div style="font:400 17px Sora,sans-serif;color:#4B5563">' + esc(p.contributor) + '</div></div>'
+        : '') +
+      '<div style="flex:1"></div>' +
+      '<div style="display:flex;align-items:flex-end;gap:11px"><div style="font:600 44px/1 Sora,sans-serif;color:' + pctColor + ';letter-spacing:-.03em;font-variant-numeric:tabular-nums">' + p.donePct + '<span style="font-size:24px">%</span></div><div style="font:500 19px Sora,sans-serif;color:#4B5563;padding-bottom:5px;font-variant-numeric:tabular-nums">' + p.doneCount + '/' + p.targetCount + '</div></div>' +
+      '<div style="margin-top:12px;height:11px;border-radius:99px;background:' + (p.status === "debt" ? "#F3DDDD" : "#E7EBEF") + ';position:relative;overflow:hidden">' +
+      '<div style="position:absolute;left:0;top:0;bottom:0;width:' + Math.min(100, p.donePct) + '%;background:' + color + ';border-radius:99px"></div>' +
+      (p.status !== "debt" && p.expectedPct != null ? '<div style="position:absolute;left:' + p.expectedPct + '%;top:-4px;bottom:-4px;width:3px;background:#0f172a;border-radius:2px"></div>' : "") +
+      '</div>' +
+      '<div style="font:' + (p.status === "debt" ? "600" : "500") + ' 17px Sora,sans-serif;color:' + (p.status === "ahead" ? "#15803d" : p.status === "behind" ? "#a45f08" : p.status === "debt" ? color : "#374151") + ';margin-top:9px">' + esc(p.deltaText) + '</div>' +
+      '</div>'
+    );
+  }
+
+  function employeeRowHtml(e, idx) {
+    var isTop = idx === 0;
+    return (
+      '<div style="flex:1;padding:0 24px;display:flex;align-items:center;gap:16px;' + (isTop ? "background:#FDFBF6;" : "") + (idx < 5 ? "border-bottom:1px solid rgba(15,23,42,.06);" : "") + '">' +
+      '<div style="width:24px;font:600 22px Sora,sans-serif;color:' + (isTop ? "#d97706" : "#6B7280") + ';font-variant-numeric:tabular-nums">' + e.rank + '</div>' +
+      '<div style="width:46px;height:46px;border-radius:14px;background:' + (isTop ? "#FBF3E6" : "#EDEFF2") + ';border:' + (isTop ? "1px solid rgba(217,119,6,.3)" : "none") + ';display:flex;align-items:center;justify-content:center;font:600 17px Sora,sans-serif;color:' + (isTop ? "#a45f08" : "#0f172a") + ';flex:none">' + esc(e.avatar) + '</div>' +
+      '<div style="flex:1;min-width:0"><div style="font:600 19px Sora,sans-serif;color:#0f172a;letter-spacing:-.01em">' + esc(e.name) + '</div><div style="font:400 18px Sora,sans-serif;color:#6B7280;margin-top:3px">' + esc(e.projectLabel) + ' · ' + esc(e.projectStatusLabel) + '</div></div>' +
+      '<div style="display:flex;align-items:baseline;gap:7px"><div style="font:600 30px Sora,sans-serif;color:#0f172a;letter-spacing:-.02em;font-variant-numeric:tabular-nums">' + e.doneCount + '</div><div style="font:500 19px Sora,sans-serif;color:#6B7280;font-variant-numeric:tabular-nums">· ' + (e.remaining == null ? "—" : e.remaining) + '</div></div>' +
+      '</div>'
+    );
+  }
+
+  function feedRowHtml(f) {
+    return (
+      '<div style="flex:1;display:flex;align-items:center;gap:13px;border-top:1px solid rgba(255,255,255,.1)">' +
+      '<div style="width:34px;height:34px;border-radius:11px;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center;font:600 14px Sora,sans-serif;color:#fff;flex:none">' + esc(f.avatar) + '</div>' +
+      '<div style="flex:1;min-width:0"><div style="font:600 17px Sora,sans-serif;color:#fff;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(f.name) + ' · ' + esc(f.label) + '</div><div style="font:400 14px Sora,sans-serif;color:rgba(255,255,255,.55);margin-top:2px">' + esc(f.projectLabel) + '</div></div>' +
+      '<div style="font:500 15px Sora,sans-serif;color:rgba(255,255,255,.8);flex:none;font-variant-numeric:tabular-nums">' + esc(f.time) + '</div>' +
+      '</div>'
+    );
+  }
+
+  function renderActivityChart(activity) {
+    if (!activity || !activity.days) return;
+    var max = Math.max(1, Math.max.apply(null, activity.days.map(function (d) { return d.count; })));
+    $("activity-chart").innerHTML = activity.days.map(function (d) {
+      var h = Math.max(4, Math.round((d.count / max) * 100));
+      var isPeak = d.date === activity.peakDate;
+      var dayNum = Number(d.date.slice(8, 10));
+      return (
+        '<div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;gap:8px">' +
+        '<div style="height:' + h + '%;border-radius:5px;background:' + (isPeak ? "#2f7ab9" : "#9CC3E3") + (isPeak ? ";box-shadow:0 0 0 2px #fff,0 0 0 3.5px #0f172a" : "") + '"></div>' +
+        '<div style="font:' + (isPeak ? "600" : "500") + ' 16px Sora,sans-serif;color:' + (isPeak ? "#0f172a" : "#6B7280") + ';text-align:center">' + dayNum + '</div>' +
+        '</div>'
+      );
+    }).join("");
+    var peakLabel = activity.peakDate ? Number(activity.peakDate.slice(8, 10)) + "-" + MONTHS[Number(activity.peakDate.slice(5, 7)) - 1].toLowerCase() : "—";
+    $("activity-peak").innerHTML = "Eng faol kun: <b style=\"color:#0f172a;font-weight:600\">" + peakLabel + "</b> · " + activity.peakCount + " faollik";
+  }
+
+  // ── Boot ──
+  if (localStorage.getItem(TOKEN_KEY)) {
+    enterDashboard();
+  } else {
+    showLogin();
+  }
+})();
+</script>
+
+</body>
+</html>
