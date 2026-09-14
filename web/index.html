@@ -46,11 +46,33 @@
   .login-hint { color: #9AA1AC; font: 400 13px Sora, sans-serif; margin-top: 14px; text-align: center; }
 
   /* ── Dashboard (design'dan) ── */
-  #dashboard-screen { display: none; height: 100vh; }
+  #dashboard-screen { display: none; height: 100vh; position: relative; }
   .act-lvl-ahead { background: #16a34a; }
   .act-lvl-onTrack { background: #2f7ab9; }
   .act-lvl-behind { background: #d97706; }
   .act-lvl-debt { background: #dc2626; }
+
+  /* ── Loading ── */
+  #loading-overlay {
+    position: absolute; inset: 0; background: #F4F6F8; z-index: 50;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+  }
+  .spinner {
+    width: 34px; height: 34px; border-radius: 99px;
+    border: 3px solid rgba(47,122,185,.18); border-top-color: #2f7ab9;
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #loading-overlay .loading-text { font: 500 16px Sora, sans-serif; color: #6B7280; }
+
+  /* ── Filtrlar ── */
+  .filter-chip {
+    height: 28px; padding: 0 12px; border-radius: 99px; border: 1px solid rgba(15,23,42,.12);
+    background: #fff; font: 500 14px Sora, sans-serif; color: #4B5563; cursor: pointer;
+    display: flex; align-items: center; gap: 7px; white-space: nowrap;
+  }
+  .filter-chip.active { border-color: transparent; background: #0f172a; color: #fff; }
+  .filter-chip .dot { width: 8px; height: 8px; border-radius: 99px; flex: none; }
 </style>
 </head>
 <body>
@@ -80,6 +102,7 @@
 </div>
 
 <div id="dashboard-screen">
+  <div id="loading-overlay"><div class="spinner"></div><div class="loading-text">Ma'lumotlar yuklanmoqda…</div></div>
   <div style="width:100%;height:100%;background:#F4F6F8;display:flex;flex-direction:column;overflow:hidden">
 
     <div style="height:92px;background:#fff;border-bottom:1px solid rgba(15,23,42,.1);display:flex;align-items:center;padding:0 40px;gap:30px;flex:none">
@@ -110,12 +133,7 @@
             <div style="font:600 21px Sora,sans-serif;color:#0f172a;letter-spacing:-.02em">Loyihalar</div>
             <div id="projects-count-label" style="font:400 16px Sora,sans-serif;color:#9AA1AC"></div>
             <div style="flex:1"></div>
-            <div style="display:flex;align-items:center;gap:20px">
-              <div style="display:flex;align-items:center;gap:8px"><div style="width:11px;height:11px;border-radius:4px;background:#16a34a"></div><div style="font:500 17px Sora,sans-serif;color:#374151">Oldinda</div></div>
-              <div style="display:flex;align-items:center;gap:8px"><div style="width:11px;height:11px;border-radius:4px;background:#2f7ab9"></div><div style="font:500 17px Sora,sans-serif;color:#374151">Rejada</div></div>
-              <div style="display:flex;align-items:center;gap:8px"><div style="width:11px;height:11px;border-radius:4px;background:#d97706"></div><div style="font:500 17px Sora,sans-serif;color:#374151">Ortda</div></div>
-              <div style="display:flex;align-items:center;gap:8px"><div style="width:11px;height:11px;border-radius:4px;background:#dc2626"></div><div style="font:500 17px Sora,sans-serif;color:#374151">Qarz</div></div>
-            </div>
+            <div id="project-status-filter" style="display:flex;align-items:center;gap:8px"></div>
           </div>
           <div id="projects-grid" style="flex:1;display:grid;grid-template-columns:1fr 1fr 1fr;grid-auto-rows:1fr;gap:16px;padding:18px;overflow-y:auto"></div>
         </div>
@@ -170,7 +188,7 @@
         </div>
 
         <div style="background:#fff;border:1px solid rgba(15,23,42,.09);border-radius:20px;padding:22px 24px;display:flex;flex-direction:column">
-          <div style="display:flex;align-items:baseline;gap:12px"><div style="font:600 18px Sora,sans-serif;color:#0f172a;letter-spacing:-.01em">Jamoa faolligi</div><div style="flex:1"></div><div style="font:400 18px Sora,sans-serif;color:#6B7280">oxirgi 14 kun</div></div>
+          <div style="display:flex;align-items:baseline;gap:12px"><div style="font:600 18px Sora,sans-serif;color:#0f172a;letter-spacing:-.01em">Jamoa faolligi</div><div style="flex:1"></div><div id="activity-period-filter" style="display:flex;align-items:center;gap:6px"></div></div>
           <div id="activity-chart" style="flex:1;display:flex;gap:7px;margin-top:16px;min-height:0"></div>
           <div id="activity-peak" style="font:400 17px Sora,sans-serif;color:#6B7280;margin-top:14px"></div>
         </div>
@@ -188,8 +206,19 @@
   var REFRESH_MS = 60000;
   var STATUS_COLOR = { ahead: "#16a34a", onTrack: "#2f7ab9", behind: "#d97706", debt: "#dc2626" };
   var STATUS_BG = { ahead: "#FAFDFB", onTrack: "#FBFCFE", behind: "#FEFBF6", debt: "#FFFAFA" };
+  var STATUS_LABEL = { ahead: "Oldinda", onTrack: "Rejada", behind: "Ortda", debt: "Qarz" };
+  var STATUS_ORDER = ["ahead", "onTrack", "behind", "debt"];
+  var ACTIVITY_PERIODS = [7, 14, 30];
   var WEEKDAYS = ["Yakshanba","Dushanba","Seshanba","Chorshanba","Payshanba","Juma","Shanba"];
   var MONTHS = ["Yanvar","Fevral","Mart","Aprel","May","Iyun","Iyul","Avgust","Sentabr","Oktabr","Noyabr","Dekabr"];
+
+  // Filtr holati — ma'lumot qayta so'ralmaydi, oxirgi kelgan `lastData`
+  // shu holatga qarab qayta chiziladi (60s'lik avtomatik yangilanish
+  // ham shu filtrlarni saqlab qoladi).
+  var lastData = null;
+  var projectStatusFilter = "all";
+  var activityPeriod = 14;
+  var firstLoadDone = false;
 
   function $(id) { return document.getElementById(id); }
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]; }); }
@@ -293,6 +322,8 @@
     loginSub.textContent = "Telefon raqamingizni kiriting — Telegram botga tasdiqlash kodi yuboriladi.";
     codeInput.value = "";
     showError("");
+    firstLoadDone = false;
+    $("loading-overlay").style.display = "flex";
   }
 
   function enterDashboard() {
@@ -325,7 +356,12 @@
       var data = await res.json();
       if (!res.ok) throw new Error(data.error || "Xatolik");
       lastUpdatedAt = Date.now();
+      lastData = data;
       render(data);
+      if (!firstLoadDone) {
+        firstLoadDone = true;
+        $("loading-overlay").style.display = "none";
+      }
     } catch (e) {
       console.error("Stats yuklashda xatolik:", e);
     }
@@ -333,15 +369,10 @@
 
   function render(data) {
     $("cycle-label").textContent = data.cycleLabel || "";
-    $("projects-count-label").textContent = data.projects.length + " faol · tempo bo'yicha";
 
-    // Ustunlar soni loyihalar soniga qarab moslashadi (dizayn 6 taga
-    // mo'ljallangan edi, lekin bu sonlar vaqt o'tishi bilan o'zgaradi —
-    // qattiq 3 ustun qolsa, 6 tadan ko'p loyiha pastki qatorda kesilib
-    // qolardi).
-    var projectCols = data.projects.length > 6 ? 4 : 3;
-    $("projects-grid").style.gridTemplateColumns = "repeat(" + projectCols + ", 1fr)";
-    $("projects-grid").innerHTML = data.projects.map(projectCardHtml).join("");
+    renderProjectStatusFilter(data.projects);
+    renderProjects(data.projects);
+
     $("employees-list").innerHTML = data.employees.map(employeeRowHtml).join("");
     $("today-feed").innerHTML = data.todayFeed.slice(0, 4).map(feedRowHtml).join("");
     $("today-count-badge").textContent = data.summary.todayDoneCount;
@@ -360,7 +391,67 @@
     $("overdue-count").textContent = data.summary.overdueCount;
     $("overdue-projects").textContent = data.summary.overdueProjectCount + " loyihada to'plangan";
 
-    renderActivityChart(data.activity14d);
+    renderActivityPeriodFilter();
+    renderActivityChart(data.activity30d);
+  }
+
+  // ── Loyihalar: holat bo'yicha filtr ──
+  // Chiplar "Loyihalar" panelidagi eski statik rang-legendasi o'rnida —
+  // endi bosilganda o'sha holatdagi loyihalarnigina ko'rsatadi (ma'lumot
+  // qayta so'ralmaydi, lastData'dan qayta chiziladi).
+  function renderProjectStatusFilter(projects) {
+    var counts = {};
+    projects.forEach(function (p) { counts[p.status] = (counts[p.status] || 0) + 1; });
+    var chips = ['<button type="button" class="filter-chip' + (projectStatusFilter === "all" ? " active" : "") + '" data-status="all">Hammasi · ' + projects.length + "</button>"];
+    STATUS_ORDER.forEach(function (status) {
+      if (!counts[status]) return;
+      chips.push(
+        '<button type="button" class="filter-chip' + (projectStatusFilter === status ? " active" : "") + '" data-status="' + status + '">' +
+        '<span class="dot" style="background:' + (projectStatusFilter === status ? "#fff" : STATUS_COLOR[status]) + '"></span>' +
+        STATUS_LABEL[status] + " · " + counts[status] +
+        "</button>",
+      );
+    });
+    var el = $("project-status-filter");
+    el.innerHTML = chips.join("");
+    Array.prototype.forEach.call(el.querySelectorAll(".filter-chip"), function (btn) {
+      btn.addEventListener("click", function () {
+        projectStatusFilter = btn.dataset.status;
+        if (lastData) {
+          renderProjectStatusFilter(lastData.projects);
+          renderProjects(lastData.projects);
+        }
+      });
+    });
+  }
+
+  function renderProjects(projects) {
+    var filtered = projectStatusFilter === "all" ? projects : projects.filter(function (p) { return p.status === projectStatusFilter; });
+    $("projects-count-label").textContent = projects.length + " faol · tempo bo'yicha";
+    // Ustunlar soni loyihalar soniga qarab moslashadi (dizayn 6 taga
+    // mo'ljallangan edi, lekin bu sonlar vaqt o'tishi bilan o'zgaradi —
+    // qattiq 3 ustun qolsa, 6 tadan ko'p loyiha pastki qatorda kesilib
+    // qolardi).
+    var projectCols = filtered.length > 6 ? 4 : 3;
+    $("projects-grid").style.gridTemplateColumns = "repeat(" + Math.max(1, Math.min(projectCols, filtered.length)) + ", 1fr)";
+    $("projects-grid").innerHTML = filtered.length
+      ? filtered.map(projectCardHtml).join("")
+      : '<div style="grid-column:1/-1;display:flex;align-items:center;justify-content:center;color:#9AA1AC;font:500 15px Sora,sans-serif">Bu holatda loyiha yoʻq</div>';
+  }
+
+  // ── Jamoa faolligi: davr filtri (7/14/30 kun) ──
+  function renderActivityPeriodFilter() {
+    var el = $("activity-period-filter");
+    el.innerHTML = ACTIVITY_PERIODS.map(function (n) {
+      return '<button type="button" class="filter-chip' + (activityPeriod === n ? " active" : "") + '" data-period="' + n + '">' + n + " kun</button>";
+    }).join("");
+    Array.prototype.forEach.call(el.querySelectorAll(".filter-chip"), function (btn) {
+      btn.addEventListener("click", function () {
+        activityPeriod = Number(btn.dataset.period);
+        renderActivityPeriodFilter();
+        if (lastData) renderActivityChart(lastData.activity30d);
+      });
+    });
   }
 
   function projectCardHtml(p) {
@@ -414,20 +505,36 @@
 
   function renderActivityChart(activity) {
     if (!activity || !activity.days) return;
-    var max = Math.max(1, Math.max.apply(null, activity.days.map(function (d) { return d.count; })));
-    $("activity-chart").innerHTML = activity.days.map(function (d) {
-      var h = Math.max(4, Math.round((d.count / max) * 100));
-      var isPeak = d.date === activity.peakDate;
+    var days = activity.days.slice(-activityPeriod);
+    var peak = days.reduce(function (max, d) { return d.count > max.count ? d : max; }, days[0]);
+
+    // Shkala uchun eng katta qiymat — lekin bitta kun favqulodda ko'p
+    // bo'lib qolsa (masalan eski ma'lumot bir vaqtda import qilingan
+    // kun), qolgan hamma ustun "0"ga yaqin ko'rinib, grafik ma'nosiz
+    // bo'lib qolardi. Shu sababli: eng katta qiymat ikkinchisidan 4
+    // martadan ortiq bo'lsa, shkala ikkinchisiga qarab olinadi — o'sha
+    // favqulodda kun ustuni 100%da "to'lgan" ko'rinadi (real son "Eng
+    // faol kun" satrida hamon to'g'ri ko'rsatiladi).
+    var sorted = days.map(function (d) { return d.count; }).sort(function (a, b) { return b - a; });
+    var scaleMax = sorted[0] || 0;
+    if (sorted.length > 1 && sorted[1] > 0 && sorted[0] > sorted[1] * 4) scaleMax = sorted[1];
+    var max = Math.max(1, scaleMax);
+
+    $("activity-chart").innerHTML = days.map(function (d) {
+      var h = Math.max(4, Math.min(100, Math.round((d.count / max) * 100)));
+      var isPeak = d.date === peak.date && peak.count > 0;
       var dayNum = Number(d.date.slice(8, 10));
       return (
-        '<div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;gap:8px">' +
+        '<div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;gap:8px" title="' + d.date + ' · ' + d.count + ' faollik">' +
         '<div style="height:' + h + '%;border-radius:5px;background:' + (isPeak ? "#2f7ab9" : "#9CC3E3") + (isPeak ? ";box-shadow:0 0 0 2px #fff,0 0 0 3.5px #0f172a" : "") + '"></div>' +
-        '<div style="font:' + (isPeak ? "600" : "500") + ' 16px Sora,sans-serif;color:' + (isPeak ? "#0f172a" : "#6B7280") + ';text-align:center">' + dayNum + '</div>' +
+        '<div style="font:' + (isPeak ? "600" : "500") + ' ' + (activityPeriod > 14 ? "13px" : "16px") + ' Sora,sans-serif;color:' + (isPeak ? "#0f172a" : "#6B7280") + ';text-align:center">' + dayNum + '</div>' +
         '</div>'
       );
     }).join("");
-    var peakLabel = activity.peakDate ? Number(activity.peakDate.slice(8, 10)) + "-" + MONTHS[Number(activity.peakDate.slice(5, 7)) - 1].toLowerCase() : "—";
-    $("activity-peak").innerHTML = "Eng faol kun: <b style=\"color:#0f172a;font-weight:600\">" + peakLabel + "</b> · " + activity.peakCount + " faollik";
+    var peakLabel = peak.count > 0 ? Number(peak.date.slice(8, 10)) + "-" + MONTHS[Number(peak.date.slice(5, 7)) - 1].toLowerCase() : "—";
+    $("activity-peak").innerHTML = peak.count > 0
+      ? "Eng faol kun: <b style=\"color:#0f172a;font-weight:600\">" + peakLabel + "</b> · " + peak.count + " faollik"
+      : "Bu davrda faollik qayd etilmagan";
   }
 
   // ── Boot ──

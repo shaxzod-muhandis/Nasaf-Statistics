@@ -236,8 +236,12 @@ async function getOverdueTasks(today) {
   };
 }
 
-async function getActivity14d(today) {
-  const start = addDays(today, -13);
+// 30 kunlik xom kunlik hisob qaytaradi — frontend 7/14/30 kunlik
+// filtr tugmasiga qarab shu massivdan kerakli oxirgi qismini kesib
+// oladi (qayta so'rov yubormasdan, chunki eng katta oyna — 30 kun —
+// baribir hammasini o'z ichiga oladi).
+async function getActivity30d(today) {
+  const start = addDays(today, -29);
   const r = await db.query(
     `select day::date as day, count(*)::int as n from (
        select (done_at + interval '5 hours')::date as day from checks where done_at is not null
@@ -250,12 +254,11 @@ async function getActivity14d(today) {
   );
   const byDay = new Map(r.rows.map((row) => [row.day, row.n]));
   const days = [];
-  for (let i = 0; i < 14; i++) {
+  for (let i = 0; i < 30; i++) {
     const d = addDays(start, i);
     days.push({ date: d, count: byDay.get(d) || 0 });
   }
-  const peak = days.reduce((max, d) => (d.count > max.count ? d : max), days[0]);
-  return { days, peakDate: peak.date, peakCount: peak.count };
+  return { days };
 }
 
 async function getWallStats() {
@@ -289,13 +292,13 @@ async function getWallStats() {
     return entry;
   });
 
-  const [employees, todayFeed, onTimePct, onTimePctPrevMonth, overdue, activity14d] = await Promise.all([
+  const [employees, todayFeed, onTimePct, onTimePctPrevMonth, overdue, activity30d] = await Promise.all([
     getEmployeeLeaderboard(monthStart, today, projectsById),
     getTodayFeed(today),
     getOnTimePct(monthStart, addDays(today, 1)),
     getOnTimePct(prevMonthStart, monthStart),
     getOverdueTasks(today),
-    getActivity14d(today),
+    getActivity30d(today),
   ]);
 
   const teamDoneCount = projectRows.reduce((sum, row) => sum + row.done_k + row.done_s, 0);
@@ -323,7 +326,7 @@ async function getWallStats() {
       overdueCount: overdue.count,
       overdueProjectCount: overdue.projectCount,
     },
-    activity14d,
+    activity30d,
   };
 }
 
