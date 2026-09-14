@@ -117,7 +117,7 @@
               <div style="display:flex;align-items:center;gap:8px"><div style="width:11px;height:11px;border-radius:4px;background:#dc2626"></div><div style="font:500 17px Sora,sans-serif;color:#374151">Qarz</div></div>
             </div>
           </div>
-          <div id="projects-grid" style="flex:1;display:grid;grid-template-columns:1fr 1fr 1fr;grid-auto-rows:1fr;gap:16px;padding:18px;overflow:hidden"></div>
+          <div id="projects-grid" style="flex:1;display:grid;grid-template-columns:1fr 1fr 1fr;grid-auto-rows:1fr;gap:16px;padding:18px;overflow-y:auto"></div>
         </div>
 
         <div style="background:#fff;border:1px solid rgba(15,23,42,.09);border-radius:20px;display:flex;flex-direction:column;overflow:hidden">
@@ -126,7 +126,7 @@
             <div style="flex:1"></div>
             <div style="font:400 18px Sora,sans-serif;color:#6B7280">bajarildi · qoldi</div>
           </div>
-          <div id="employees-list" style="flex:1;display:flex;flex-direction:column;overflow:hidden"></div>
+          <div id="employees-list" style="flex:1;display:flex;flex-direction:column;overflow-y:auto"></div>
         </div>
 
       </div>
@@ -140,7 +140,7 @@
             <div style="flex:1"></div>
             <div id="today-count-badge" style="font:600 30px/1 Sora,sans-serif;color:#fff;letter-spacing:-.02em;font-variant-numeric:tabular-nums"></div>
           </div>
-          <div id="today-feed" style="flex:1;display:flex;flex-direction:column;overflow:hidden"></div>
+          <div id="today-feed" style="flex:1;display:flex;flex-direction:column;overflow-y:auto"></div>
         </div>
 
         <div style="background:#fff;border:1px solid rgba(15,23,42,.09);border-radius:20px;padding:22px 24px;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:16px">
@@ -171,7 +171,7 @@
 
         <div style="background:#fff;border:1px solid rgba(15,23,42,.09);border-radius:20px;padding:22px 24px;display:flex;flex-direction:column">
           <div style="display:flex;align-items:baseline;gap:12px"><div style="font:600 18px Sora,sans-serif;color:#0f172a;letter-spacing:-.01em">Jamoa faolligi</div><div style="flex:1"></div><div style="font:400 18px Sora,sans-serif;color:#6B7280">oxirgi 14 kun</div></div>
-          <div id="activity-chart" style="flex:1;display:flex;align-items:flex-end;gap:7px;margin-top:16px"></div>
+          <div id="activity-chart" style="flex:1;display:flex;gap:7px;margin-top:16px;min-height:0"></div>
           <div id="activity-peak" style="font:400 17px Sora,sans-serif;color:#6B7280;margin-top:14px"></div>
         </div>
 
@@ -343,7 +343,7 @@
     $("projects-grid").style.gridTemplateColumns = "repeat(" + projectCols + ", 1fr)";
     $("projects-grid").innerHTML = data.projects.map(projectCardHtml).join("");
     $("employees-list").innerHTML = data.employees.map(employeeRowHtml).join("");
-    $("today-feed").innerHTML = data.todayFeed.slice(0, 6).map(feedRowHtml).join("");
+    $("today-feed").innerHTML = data.todayFeed.slice(0, 4).map(feedRowHtml).join("");
     $("today-count-badge").textContent = data.summary.todayDoneCount;
 
     $("team-done").textContent = data.summary.teamDoneCount;
