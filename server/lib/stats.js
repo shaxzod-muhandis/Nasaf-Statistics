@@ -202,6 +202,60 @@ async function getTodayFeed(today) {
   }));
 }
 
+// "Qarsak" bildirishnomasi uchun — `since`dan keyin bajarilgan post/
+// stories (checks) va bajarilgan deb belgilangan vazifalarni (tasks,
+// status='done') birlashtirib, vaqt bo'yicha tartiblab qaytaradi.
+// Devor ekrani buni tez-tez (getWallStats'dan mustaqil, alohida yengil
+// so'rov sifatida) so'rab, yangi hodisa chiqsa tabriklov modalini
+// ko'rsatadi.
+async function getCelebrations(since) {
+  const [checksR, tasksR] = await Promise.all([
+    db.query(
+      `select c.type, c.seq_number, c.done_at as at, p.label as project_label,
+              coalesce(nullif(trim(concat(u.first_name, ' ', u.last_name)), ''), u.username) as user_name
+       from checks c
+       join project_cycles pc on pc.id = c.cycle_id
+       join projects p on p.id = pc.project_id
+       left join users u on u.id = c.done_by
+       where c.done_at is not null and c.done_at > $1
+       order by c.done_at asc
+       limit 20`,
+      [since],
+    ),
+    db.query(
+      `select t.title, t.completed_at as at,
+              coalesce(nullif(trim(concat(u.first_name, ' ', u.last_name)), ''), u.username) as user_name
+       from tasks t
+       join users u on u.id = t.assignee_user_id
+       where t.status = 'done' and t.completed_at is not null and t.completed_at > $1
+       order by t.completed_at asc
+       limit 20`,
+      [since],
+    ),
+  ]);
+
+  const checkEvents = checksR.rows
+    .filter((row) => row.user_name)
+    .map((row) => ({
+      name: row.user_name,
+      kind: row.type === "k" ? "post" : "stories",
+      label: `${row.type === "k" ? "Post" : "Stories"} #${row.seq_number}`,
+      detail: row.project_label,
+      at: row.at,
+    }));
+  const taskEvents = tasksR.rows
+    .filter((row) => row.user_name)
+    .map((row) => ({
+      name: row.user_name,
+      kind: "task",
+      label: "Vazifa",
+      detail: row.title,
+      at: row.at,
+    }));
+
+  return [...checkEvents, ...taskEvents].sort((a, b) => new Date(a.at) - new Date(b.at));
+}
+
 async function getOnTimePct(rangeStart, rangeEnd) {
   // completed_at — timestamptz (haqiqiy UTC payt), due_date — oddiy
   // `date`. Boshqa joyda ishlatilgan konventsiyaga mos ravishda, "qaysi
@@ -292,6 +346,18 @@ async function getWallStats() {
     return entry;
   });
 
+  // Xodimlar paneli kabi — eng yaxshi natijali loyiha birinchi bo'lib
+  // chiqadi (alifbo tartibi o'rniga). Avval holat bo'yicha (Oldinda >
+  // Rejada > Ortda > Qarz), so'ng har bir holat ichida darajasi bo'yicha
+  // (tempodan qanchalik oldinda/ortda, Qarz uchun — qancha kam qolgan).
+  const STATUS_RANK = { ahead: 3, onTrack: 2, behind: 1, debt: 0 };
+  projects.sort((a, b) => {
+    const rankDiff = STATUS_RANK[b.status] - STATUS_RANK[a.status];
+    if (rankDiff !== 0) return rankDiff;
+    const scoreOf = (p) => (p.status === "debt" ? -p.remaining : p.donePct - p.expectedPct);
+    return scoreOf(b) - scoreOf(a);
+  });
+
   const [employees, todayFeed, onTimePct, onTimePctPrevMonth, overdue, activity30d] = await Promise.all([
     getEmployeeLeaderboard(monthStart, today, projectsById),
     getTodayFeed(today),
@@ -330,4 +396,4 @@ async function getWallStats() {
   };
 }
 
-module.exports = { getWallStats };
+module.exports = { getWallStats, getCelebrations };

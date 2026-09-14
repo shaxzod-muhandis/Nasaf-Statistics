@@ -73,6 +73,42 @@
   }
   .filter-chip.active { border-color: transparent; background: #0f172a; color: #fff; }
   .filter-chip .dot { width: 8px; height: 8px; border-radius: 99px; flex: none; }
+
+  /* ── Tabriklov modali ── */
+  #celebrate-overlay {
+    position: fixed; inset: 0; z-index: 100; display: none;
+    align-items: center; justify-content: center;
+    background: rgba(15,23,42,.35); overflow: hidden;
+  }
+  #celebrate-overlay.show { display: flex; }
+  #celebrate-confetti { position: absolute; inset: 0; pointer-events: none; }
+  .confetti-piece {
+    position: absolute; top: -24px; width: 10px; height: 16px; opacity: .95;
+    animation: confetti-fall linear forwards;
+  }
+  @keyframes confetti-fall {
+    to { transform: translateY(110vh) rotate(600deg); opacity: .3; }
+  }
+  .celebrate-card {
+    position: relative; z-index: 1; background: #fff; border-radius: 24px;
+    padding: 44px 56px; text-align: center; box-shadow: 0 30px 70px rgba(15,23,42,.28);
+    transform: scale(.85); opacity: 0;
+    animation: celebrate-in .45s cubic-bezier(.34,1.56,.64,1) forwards;
+  }
+  .celebrate-card.leaving {
+    animation: celebrate-out .35s ease forwards;
+  }
+  @keyframes celebrate-in { to { transform: scale(1); opacity: 1; } }
+  @keyframes celebrate-out { to { transform: scale(.9) translateY(-14px); opacity: 0; } }
+  .celebrate-emoji { font-size: 52px; line-height: 1; }
+  .celebrate-avatar {
+    width: 84px; height: 84px; border-radius: 99px; margin: 14px auto 0;
+    background: linear-gradient(135deg,#2f7ab9,#5795C6); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font: 700 32px Sora, sans-serif; letter-spacing: -.02em;
+  }
+  .celebrate-name { font: 700 30px Sora, sans-serif; color: #0f172a; letter-spacing: -.02em; margin-top: 18px; }
+  .celebrate-detail { font: 500 18px Sora, sans-serif; color: #6B7280; margin-top: 8px; }
 </style>
 </head>
 <body>
@@ -198,12 +234,25 @@
   </div>
 </div>
 
+<div id="celebrate-overlay">
+  <div id="celebrate-confetti"></div>
+  <div class="celebrate-card" id="celebrate-card">
+    <div class="celebrate-emoji">🎉</div>
+    <div class="celebrate-avatar" id="celebrate-avatar"></div>
+    <div class="celebrate-name" id="celebrate-name"></div>
+    <div class="celebrate-detail" id="celebrate-detail"></div>
+  </div>
+</div>
+
 <script>
 (function () {
   "use strict";
 
   var TOKEN_KEY = "wall_token";
   var REFRESH_MS = 60000;
+  var CELEBRATE_POLL_MS = 6000;
+  var CELEBRATE_SHOW_MS = 5000;
+  var CELEBRATE_KIND_LABEL = { post: "Postni bajardi", stories: "Storiesni bajardi", task: "Vazifani bajardi" };
   var STATUS_COLOR = { ahead: "#16a34a", onTrack: "#2f7ab9", behind: "#d97706", debt: "#dc2626" };
   var STATUS_BG = { ahead: "#FAFDFB", onTrack: "#FBFCFE", behind: "#FEFBF6", debt: "#FFFAFA" };
   var STATUS_LABEL = { ahead: "Oldinda", onTrack: "Rejada", behind: "Ortda", debt: "Qarz" };
@@ -333,6 +382,7 @@
     setInterval(tickClock, 1000);
     loadStats();
     setInterval(loadStats, REFRESH_MS);
+    initCelebrations();
   }
 
   // ── Clock ──
@@ -535,6 +585,121 @@
     $("activity-peak").innerHTML = peak.count > 0
       ? "Eng faol kun: <b style=\"color:#0f172a;font-weight:600\">" + peakLabel + "</b> · " + peak.count + " faollik"
       : "Bu davrda faollik qayd etilmagan";
+  }
+
+  // ── Tabriklov ("qarsak") modali ──
+  // Post/Stories yoki xodimga biriktirilgan vazifa bajarilganda, butun
+  // jamoa ko'rib turgan devor ekranida 5 soniyaga xodim ismini
+  // ko'rsatib tabriklaydi. Real-time push (WebSocket/SSE) o'rniga —
+  // Vercel serverless funksiyalarida uzoq muddatli ulanish yo'q — bu
+  // yengil /api/celebrations endpointini tez-tez (6s) so'rash orqali
+  // qilingan; asosiy /api/stats bilan aralashtirilmagan, chunki u
+  // og'irroq va faqat 60s'da bir marta kerak.
+  var celebrateSince = null;
+  var celebrateQueue = [];
+  var celebrateShowing = false;
+  var audioCtx = null;
+
+  function unlockAudio() {
+    if (audioCtx) return;
+    try {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    } catch (e) { /* brauzer qo'llamasa — ovozsiz davom etadi */ }
+  }
+  document.addEventListener("click", unlockAudio, { once: true });
+
+  // Qarsak ovozini haqiqiy audio fayl ulamasdan, Web Audio API orqali
+  // "sintez" qiladi — bir nechta qisqa oq-shovqin portlashlari orqali
+  // qarsak taqillashiga o'xshatilgan (tashqi audio fayl/CDN kerak emas).
+  function playApplause() {
+    if (!audioCtx) return;
+    try {
+      if (audioCtx.state === "suspended") audioCtx.resume();
+      var now = audioCtx.currentTime;
+      var claps = 18;
+      for (var i = 0; i < claps; i++) {
+        var t = now + Math.random() * 1.1;
+        var dur = 0.04 + Math.random() * 0.03;
+        var buffer = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * dur), audioCtx.sampleRate);
+        var data = buffer.getChannelData(0);
+        for (var j = 0; j < data.length; j++) data[j] = (Math.random() * 2 - 1) * Math.pow(1 - j / data.length, 2);
+        var src = audioCtx.createBufferSource();
+        src.buffer = buffer;
+        var filter = audioCtx.createBiquadFilter();
+        filter.type = "bandpass";
+        filter.frequency.value = 1800 + Math.random() * 1600;
+        var gain = audioCtx.createGain();
+        gain.gain.value = 0.35 + Math.random() * 0.25;
+        src.connect(filter).connect(gain).connect(audioCtx.destination);
+        src.start(t);
+      }
+    } catch (e) { /* ovoz muvaffaqiyatsiz bo'lsa ham vizual tabrik davom etadi */ }
+  }
+
+  var CONFETTI_COLORS = ["#2f7ab9", "#16a34a", "#d97706", "#dc2626", "#5795C6", "#facc15"];
+  function spawnConfetti() {
+    var host = $("celebrate-confetti");
+    host.innerHTML = "";
+    for (var i = 0; i < 50; i++) {
+      var piece = document.createElement("div");
+      piece.className = "confetti-piece";
+      piece.style.left = Math.random() * 100 + "%";
+      piece.style.background = CONFETTI_COLORS[i % CONFETTI_COLORS.length];
+      piece.style.animationDuration = 1.6 + Math.random() * 1.4 + "s";
+      piece.style.animationDelay = Math.random() * 0.4 + "s";
+      host.appendChild(piece);
+    }
+  }
+
+  function celebrateHtml(ev) {
+    return {
+      name: ev.name,
+      avatar: initialsOf(ev.name),
+      detail: (CELEBRATE_KIND_LABEL[ev.kind] || "Bajardi") + (ev.detail ? " · " + ev.detail : ""),
+    };
+  }
+  function initialsOf(name) { return (name || "?").trim().slice(0, 1).toUpperCase(); }
+
+  function processCelebrateQueue() {
+    if (celebrateShowing || celebrateQueue.length === 0) return;
+    celebrateShowing = true;
+    var ev = celebrateQueue.shift();
+    var view = celebrateHtml(ev);
+    $("celebrate-avatar").textContent = view.avatar;
+    $("celebrate-name").textContent = view.name;
+    $("celebrate-detail").textContent = view.detail;
+    var card = $("celebrate-card");
+    card.classList.remove("leaving");
+    spawnConfetti();
+    playApplause();
+    $("celebrate-overlay").classList.add("show");
+    setTimeout(function () {
+      card.classList.add("leaving");
+      setTimeout(function () {
+        $("celebrate-overlay").classList.remove("show");
+        $("celebrate-confetti").innerHTML = "";
+        celebrateShowing = false;
+        processCelebrateQueue();
+      }, 350);
+    }, CELEBRATE_SHOW_MS);
+  }
+
+  async function pollCelebrations() {
+    try {
+      var res = await apiFetch("/api/celebrations?since=" + encodeURIComponent(celebrateSince));
+      if (!res.ok) return;
+      var data = await res.json();
+      celebrateSince = data.now || new Date().toISOString();
+      (data.events || []).forEach(function (ev) { celebrateQueue.push(ev); });
+      processCelebrateQueue();
+    } catch (e) {
+      console.error("Celebrations so'rovida xatolik:", e);
+    }
+  }
+
+  function initCelebrations() {
+    celebrateSince = new Date().toISOString();
+    setInterval(pollCelebrations, CELEBRATE_POLL_MS);
   }
 
   // ── Boot ──

@@ -10,7 +10,7 @@ const path = require("path");
 const fs = require("fs");
 const express = require("express");
 const { requestCode, verifyCode, requireAuth } = require("./lib/auth");
-const { getWallStats } = require("./lib/stats");
+const { getWallStats, getCelebrations } = require("./lib/stats");
 
 const app = express();
 app.use(express.json());
@@ -38,6 +38,22 @@ app.get("/api/stats", requireAuth, async (req, res) => {
     res.json(stats);
   } catch (e) {
     console.error("Stats xatosi:", e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// "Qarsak" tabrigi uchun — frontend buni har necha soniyada bir
+// so'raydi (to'liq /api/stats'dan ancha yengil). `since` bo'lmasa,
+// hozirgi vaqtdan boshlab hisoblaydi (birinchi so'rovda eski hodisalar
+// bilan "to'lib ketmasin" deb).
+app.get("/api/celebrations", requireAuth, async (req, res) => {
+  try {
+    const since = req.query.since ? new Date(req.query.since) : new Date();
+    if (isNaN(since.getTime())) return res.status(400).json({ error: "since noto'g'ri" });
+    const events = await getCelebrations(since.toISOString());
+    res.json({ ok: true, events, now: new Date().toISOString() });
+  } catch (e) {
+    console.error("Celebrations xatosi:", e);
     res.status(500).json({ error: e.message });
   }
 });
