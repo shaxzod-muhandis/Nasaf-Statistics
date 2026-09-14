@@ -135,47 +135,45 @@ function classifyProject(row, today) {
   };
 }
 
+// Xodim reytingi loyihalar aro QO'SHILMAYDI — har bir xodim faqat
+// bitta (shu oy eng ko'p ishlagan) loyihasi bo'yicha hisoblanadi, va
+// qatorda ko'rsatilgan raqam ANIQ o'sha loyihaga tegishli (avval barcha
+// loyihalar bo'yicha yig'indi ko'rsatilib, lekin faqat bitta loyiha
+// nomi yozilardi — chalkashtirar edi, 2026-09-15 fikr-mulohaza).
 async function getEmployeeLeaderboard(monthStart, today, projectsById) {
   const r = await db.query(
-    `with work as (
-       select c.done_by as user_id, pc.project_id
+    `with by_project as (
+       select c.done_by as user_id, pc.project_id, count(*) as n
        from checks c join project_cycles pc on pc.id = c.cycle_id
        where c.done_by is not null and c.work_date between $1 and $2
+       group by c.done_by, pc.project_id
      ),
-     by_project as (
-       select user_id, project_id, count(*) as n
-       from work group by user_id, project_id
-     ),
-     totals as (
-       select user_id, sum(n)::int as done_count
-       from by_project group by user_id
-     ),
-     primary_project as (
-       select distinct on (user_id) user_id, project_id
-       from by_project order by user_id, n desc
+     top_per_user as (
+       select distinct on (user_id) user_id, project_id, n
+       from by_project
+       order by user_id, n desc
      )
-     select t.user_id, t.done_count,
+     select t.user_id, t.n as done_count, t.project_id,
             coalesce(nullif(trim(concat(u.first_name, ' ', u.last_name)), ''), u.username) as name,
-            pp.project_id as primary_project_id, p.label as primary_project_label
-     from totals t
+            p.label as project_label
+     from top_per_user t
      join users u on u.id = t.user_id and u.is_active
-     left join primary_project pp on pp.user_id = t.user_id
-     left join projects p on p.id = pp.project_id
-     order by t.done_count desc
+     join projects p on p.id = t.project_id
+     order by t.n desc
      limit 10`,
     [monthStart, today],
   );
 
   return r.rows.map((row, idx) => {
-    const primary = row.primary_project_id ? projectsById.get(row.primary_project_id) : null;
+    const project = projectsById.get(row.project_id);
     return {
       rank: idx + 1,
       name: row.name,
       avatar: initials(row.name),
       doneCount: row.done_count,
-      projectLabel: row.primary_project_label || "—",
-      projectStatusLabel: primary ? primary.statusLabel : "—",
-      remaining: primary ? primary.remaining : null,
+      projectLabel: row.project_label,
+      projectStatusLabel: project ? project.statusLabel : "—",
+      remaining: project ? project.remaining : null,
     };
   });
 }
