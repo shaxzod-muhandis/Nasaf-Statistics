@@ -682,27 +682,67 @@
   // Qarsak ovozini haqiqiy audio fayl ulamasdan, Web Audio API orqali
   // "sintez" qiladi — bir nechta qisqa oq-shovqin portlashlari orqali
   // qarsak taqillashiga o'xshatilgan (tashqi audio fayl/CDN kerak emas).
+  // Bitta "qarsak" — juda qisqa oq-shovqin, EKSPONENSIAL pasayish bilan
+  // (avvalgi versiyada kvadratik-chiziqli so'nish edi — bu asta so'nib,
+  // xirillagan "shovqin" kabi eshitilardi; haqiqiy qarsak esa deyarli
+  // bir zumda portlab, keskin so'nadi). Ikki filtr qatlamiga bo'linadi:
+  // yuqori chastotali "chaqilish" (bandpass) + past-o'rta "tana"
+  // (lowpass) — shu ikkisi birga to'liqroq, real qarsakka yaqinroq
+  // tovush beradi (faqat bandpass — ingichka, hissli tovush berardi).
+  function scheduleClap(t) {
+    var dur = 0.018 + Math.random() * 0.022;
+    var buffer = audioCtx.createBuffer(1, Math.max(1, Math.floor(audioCtx.sampleRate * dur)), audioCtx.sampleRate);
+    var data = buffer.getChannelData(0);
+    for (var j = 0; j < data.length; j++) {
+      var decay = Math.exp(-(j / data.length) * 38);
+      data[j] = (Math.random() * 2 - 1) * decay;
+    }
+    var src = audioCtx.createBufferSource();
+    src.buffer = buffer;
+
+    var crack = audioCtx.createBiquadFilter();
+    crack.type = "bandpass";
+    crack.frequency.value = 2200 + Math.random() * 3500;
+    crack.Q.value = 0.6;
+
+    var body = audioCtx.createBiquadFilter();
+    body.type = "lowpass";
+    body.frequency.value = 700 + Math.random() * 500;
+
+    var gain = audioCtx.createGain();
+    var peak = 0.28 + Math.random() * 0.22;
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(peak, t + 0.002);
+    gain.gain.linearRampToValueAtTime(0, t + dur + 0.03);
+
+    src.connect(crack).connect(gain);
+    src.connect(body).connect(gain);
+
+    if (typeof audioCtx.createStereoPanner === "function") {
+      var panner = audioCtx.createStereoPanner();
+      panner.pan.value = Math.max(-1, Math.min(1, (Math.random() * 2 - 1) * 0.85));
+      gain.connect(panner).connect(audioCtx.destination);
+    } else {
+      gain.connect(audioCtx.destination);
+    }
+    src.start(t);
+  }
+
+  // Butun "qarsaklar ovozi" — boshida bir zumlik zich zarba (qo'llar
+  // birdan "portlab" ketgandek), so'ng 1.6 soniya davomida asta
+  // siyraklashib boruvchi taqillash bilan davom etadi (Math.random()'ni
+  // daraja bilan qiyshaytirish orqali — kichik qiymatlar, ya'ni ertaroq
+  // vaqtlar, ko'proq chiqadi).
   function playApplause() {
     if (!audioCtx) return;
     try {
       if (audioCtx.state === "suspended") audioCtx.resume();
       var now = audioCtx.currentTime;
-      var claps = 18;
-      for (var i = 0; i < claps; i++) {
-        var t = now + Math.random() * 1.1;
-        var dur = 0.04 + Math.random() * 0.03;
-        var buffer = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * dur), audioCtx.sampleRate);
-        var data = buffer.getChannelData(0);
-        for (var j = 0; j < data.length; j++) data[j] = (Math.random() * 2 - 1) * Math.pow(1 - j / data.length, 2);
-        var src = audioCtx.createBufferSource();
-        src.buffer = buffer;
-        var filter = audioCtx.createBiquadFilter();
-        filter.type = "bandpass";
-        filter.frequency.value = 1800 + Math.random() * 1600;
-        var gain = audioCtx.createGain();
-        gain.gain.value = 0.35 + Math.random() * 0.25;
-        src.connect(filter).connect(gain).connect(audioCtx.destination);
-        src.start(t);
+      for (var i = 0; i < 14; i++) scheduleClap(now + Math.random() * 0.12);
+      var hits = 42;
+      for (var k = 0; k < hits; k++) {
+        var progress = Math.pow(Math.random(), 1.7);
+        scheduleClap(now + 0.05 + progress * 1.6);
       }
     } catch (e) { /* ovoz muvaffaqiyatsiz bo'lsa ham vizual tabrik davom etadi */ }
   }
