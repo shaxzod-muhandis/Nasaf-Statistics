@@ -225,7 +225,7 @@
           <div style="padding:20px 24px;border-bottom:1px solid rgba(15,23,42,.08);display:flex;align-items:baseline;gap:12px;flex:none">
             <div style="font:600 21px Sora,sans-serif;color:#0f172a;letter-spacing:-.02em">Xodimlar</div>
             <div style="flex:1"></div>
-            <div style="font:400 18px Sora,sans-serif;color:#6B7280">bajarildi · qoldi</div>
+            <div style="font:400 18px Sora,sans-serif;color:#6B7280">shu oy bajarildi</div>
           </div>
           <div id="employees-list" style="flex:1;display:flex;flex-direction:column;overflow-y:auto"></div>
         </div>
@@ -609,7 +609,7 @@
       '<div style="width:24px;font:600 22px Sora,sans-serif;color:' + (isTop ? "#d97706" : "#6B7280") + ';font-variant-numeric:tabular-nums">' + e.rank + '</div>' +
       '<div style="width:46px;height:46px;border-radius:14px;background:' + (isTop ? "#FBF3E6" : "#EDEFF2") + ';border:' + (isTop ? "1px solid rgba(217,119,6,.3)" : "none") + ';display:flex;align-items:center;justify-content:center;font:600 17px Sora,sans-serif;color:' + (isTop ? "#a45f08" : "#0f172a") + ';flex:none">' + esc(e.avatar) + '</div>' +
       '<div style="flex:1;min-width:0"><div style="font:600 19px Sora,sans-serif;color:#0f172a;letter-spacing:-.01em">' + esc(e.name) + '</div><div style="font:400 18px Sora,sans-serif;color:#6B7280;margin-top:3px">' + esc(e.projectLabel) + ' · ' + esc(e.projectStatusLabel) + '</div></div>' +
-      '<div style="display:flex;align-items:baseline;gap:7px"><div style="font:600 30px Sora,sans-serif;color:#0f172a;letter-spacing:-.02em;font-variant-numeric:tabular-nums">' + e.doneCount + '</div><div style="font:500 19px Sora,sans-serif;color:#6B7280;font-variant-numeric:tabular-nums">· ' + (e.remaining == null ? "—" : e.remaining) + '</div></div>' +
+      '<div style="font:600 30px Sora,sans-serif;color:#0f172a;letter-spacing:-.02em;font-variant-numeric:tabular-nums">' + e.doneCount + '</div>' +
       '</div>'
     );
   }

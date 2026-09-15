@@ -140,6 +140,13 @@ function classifyProject(row, today) {
 // qatorda ko'rsatilgan raqam ANIQ o'sha loyihaga tegishli (avval barcha
 // loyihalar bo'yicha yig'indi ko'rsatilib, lekin faqat bitta loyiha
 // nomi yozilardi — chalkashtirar edi, 2026-09-15 fikr-mulohaza).
+// "Qoldi" ustuni ataylab yo'q — checklar oldindan xodimga
+// "biriktirilmaydi" (ruxsati bor har kim istalgan postni belgilashi
+// mumkin), shuning uchun "shaxsiy qolgan ish" tushunchasi bu ma'lumot
+// modelida mavjud emas (avval loyihaning UMUMIY qolgan ishi
+// ko'rsatilardi, lekin bu shaxsiy ko'rinib chalkashtirardi). Reyting va
+// ko'rsatiladigan qator ENDI faqat BITTA aniq songa — shu oy shu
+// loyihada bajargan ish soniga — asoslanadi.
 async function getEmployeeLeaderboard(monthStart, today, projectsById) {
   const r = await db.query(
     `with by_project as (
@@ -173,7 +180,6 @@ async function getEmployeeLeaderboard(monthStart, today, projectsById) {
       doneCount: row.done_count,
       projectLabel: row.project_label,
       projectStatusLabel: project ? project.statusLabel : "—",
-      remaining: project ? project.remaining : null,
     };
   });
 }
