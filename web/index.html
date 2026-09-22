@@ -228,9 +228,8 @@
               <div style="width:10px;height:10px;border-radius:99px;background:#4ade80;animation:pulse 2.4s ease-in-out infinite;flex:none"></div>
               <div style="font:600 19px Sora,sans-serif;color:#fff;letter-spacing:-.01em">Bugun bajarilgan ishlar</div>
               <div style="flex:1"></div>
-              <div id="feed-date-label" style="font:400 16px Sora,sans-serif;color:rgba(255,255,255,.62)"></div>
             </div>
-            <div id="today-feed" style="flex:1;display:flex;flex-direction:column;padding:0 24px;overflow-y:auto;min-height:0"></div>
+            <div id="today-feed" style="flex:1;display:flex;flex-direction:column;padding:0 24px;overflow:hidden;min-height:0"></div>
             <div style="padding:16px 24px 18px;border-top:1px solid rgba(255,255,255,.14);display:flex;align-items:center;gap:11px;flex:none;background:rgba(255,255,255,.04)">
               <div id="today-count-badge" style="font:600 34px/1 Sora,sans-serif;color:#fff;letter-spacing:-.03em;font-variant-numeric:tabular-nums"></div>
               <div style="font:400 17px Sora,sans-serif;color:rgba(255,255,255,.66)">vazifa bugun</div>
@@ -536,11 +535,8 @@
     renderProjectStatusFilter(data.projects);
     renderProjects(data.projects);
 
-    $("today-feed").innerHTML = data.todayFeed.length
-      ? data.todayFeed.map(feedRowHtml).join("")
-      : '<div style="flex:1;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.5);font:500 15px Sora,sans-serif">Bugun hali hech narsa yo\'q</div>';
+    startFeedRotation(data.todayFeed);
     var now = tashkentNow();
-    $("feed-date-label").textContent = now.getUTCDate() + "-" + MONTHS[now.getUTCMonth()].toLowerCase();
     $("today-count-badge").textContent = data.summary.todayDoneCount;
     $("today-post-count").textContent = data.summary.todayPostCount;
     $("today-stories-count").textContent = data.summary.todayStoriesCount;
@@ -666,6 +662,56 @@
       '<div style="font:500 16px Sora,sans-serif;color:rgba(255,255,255,.7);flex:none;font-variant-numeric:tabular-nums">' + esc(f.time) + '</div>' +
       '</div>'
     );
+  }
+
+  // ── "Bugun bajarilgan ishlar" — avtomatik sahifalab aylantirish ──
+  // Kartaning tepasidagi ingichka chiziqcha (@keyframes tick, 6s) —
+  // vaqt o'tishini ko'rsatuvchi indikator: har 6 soniyada ro'yxatning
+  // KEYINGI sahifasi ko'rsatiladi (barchasi ekranga sig'masa). Bitta
+  // sahifaga nechta qator sig'ishi konteyner balandligidan avtomatik
+  // hisoblanadi (ekran o'lchamidan qat'i nazar to'g'ri ishlashi uchun).
+  var FEED_ROTATE_MS = 6000;
+  var feedItemsCache = [];
+  var feedPageIndex = 0;
+  var feedRotateTimer = null;
+  var feedRowHeightCache = null;
+
+  function startFeedRotation(items) {
+    feedItemsCache = items || [];
+    feedPageIndex = 0;
+    feedRowHeightCache = null;
+    renderFeedPage();
+    if (feedRotateTimer) clearInterval(feedRotateTimer);
+    feedRotateTimer = setInterval(function () {
+      feedPageIndex++;
+      renderFeedPage();
+    }, FEED_ROTATE_MS);
+  }
+
+  function feedPageSize(container) {
+    if (!feedRowHeightCache && feedItemsCache.length) {
+      var probe = document.createElement("div");
+      probe.style.cssText = "position:absolute;visibility:hidden;pointer-events:none";
+      probe.innerHTML = feedRowHtml(feedItemsCache[0]);
+      container.appendChild(probe);
+      feedRowHeightCache = probe.firstChild.offsetHeight || 70;
+      container.removeChild(probe);
+    }
+    return Math.max(1, Math.floor(container.clientHeight / (feedRowHeightCache || 70)));
+  }
+
+  function renderFeedPage() {
+    var container = $("today-feed");
+    if (!container) return;
+    if (!feedItemsCache.length) {
+      container.innerHTML = '<div style="flex:1;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.5);font:500 15px Sora,sans-serif">Bugun hali hech narsa yo\'q</div>';
+      return;
+    }
+    var pageSize = feedPageSize(container);
+    var totalPages = Math.max(1, Math.ceil(feedItemsCache.length / pageSize));
+    feedPageIndex = ((feedPageIndex % totalPages) + totalPages) % totalPages;
+    var start = feedPageIndex * pageSize;
+    container.innerHTML = feedItemsCache.slice(start, start + pageSize).map(feedRowHtml).join("");
   }
 
   // ── Tabriklov ("qarsak") modali ──
