@@ -418,6 +418,54 @@
     loadStats();
     setInterval(loadStats, REFRESH_MS);
     initCelebrations();
+    keepScreenAwake();
+  }
+
+  // ── Ekranni uyg'oq saqlash (devor displeyi doimiy yoqiq turishi kerak) ──
+  // Asosiy himoya — brauzer standarti Wake Lock API. Bu televizor eski
+  // qurilma bo'lgani uchun uni qo'llamasligi mumkin — shu sabab qo'shimcha
+  // zaxira sifatida, ko'plab kiosk/signage tizimlarida ishlatiladigan
+  // eski-uslub'dagi hiyla ham qo'llaniladi: ko'zga ko'rinmas, ovozsiz,
+  // doim aylanadigan video oqim — ko'p qurilmalar "video ijro etilyapti"
+  // holatini ekran skrinseyveri/o'chishi uchun "faol" deb hisoblaydi.
+  // Diqqat: ba'zi eski webOS'larda TVning O'ZINING tizim skrinseyveri bu
+  // ikkalasidan ham mustaqil ishlaydi — shu holatda faqat TV sozlamalari
+  // (Settings → Energy Saving) orqali to'liq o'chirish mumkin.
+  var wakeLock = null;
+  async function keepScreenAwake() {
+    try {
+      if ("wakeLock" in navigator) {
+        wakeLock = await navigator.wakeLock.request("screen");
+        wakeLock.addEventListener("release", function () {
+          wakeLock = null;
+        });
+      }
+    } catch (e) {
+      console.warn("Wake Lock so'ralmadi:", e.message);
+    }
+    startFallbackVideoLoop();
+  }
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible" && !wakeLock && "wakeLock" in navigator) {
+      keepScreenAwake();
+    }
+  });
+  function startFallbackVideoLoop() {
+    try {
+      var canvas = document.createElement("canvas");
+      canvas.width = 2;
+      canvas.height = 2;
+      var stream = canvas.captureStream ? canvas.captureStream(1) : null;
+      if (!stream) return;
+      var video = document.createElement("video");
+      video.srcObject = stream;
+      video.muted = true;
+      video.playsInline = true;
+      video.setAttribute("aria-hidden", "true");
+      video.style.cssText = "position:fixed;width:1px;height:1px;opacity:0;pointer-events:none";
+      document.body.appendChild(video);
+      video.play().catch(function () {});
+    } catch (e) { /* qo'llab-quvvatlanmasa ham dashboard davom etaveradi */ }
   }
 
   // ── Moslashuvchan kanvas ──
