@@ -184,9 +184,11 @@ async function getEmployeeLeaderboard(monthStart, today, projectsById) {
   });
 }
 
+const STORY_KIND_LABEL_UZ = { info: "Ma'lumot beruvchi", atmospheric: "Atmosferali video" };
+
 async function getTodayFeed(today) {
   const r = await db.query(
-    `select c.type, c.seq_number, c.done_at, p.label as project_label,
+    `select c.type, c.seq_number, c.done_at, c.story_kind, p.label as project_label,
             coalesce(nullif(trim(concat(u.first_name, ' ', u.last_name)), ''), u.username) as user_name
      from checks c
      join project_cycles pc on pc.id = c.cycle_id
@@ -197,13 +199,71 @@ async function getTodayFeed(today) {
      limit 20`,
     [today],
   );
-  return r.rows.map((row) => ({
-    name: row.user_name || "—",
-    avatar: initials(row.user_name),
-    label: `${row.type === "k" ? "Post" : "Stories"} #${row.seq_number}`,
-    projectLabel: row.project_label,
-    time: fmtTime(row.done_at),
-  }));
+  return r.rows.map((row) => {
+    const kindLabel = row.type === "k" ? "Post" : "Stories";
+    // story_kind — checks jadvalida haqiqatan bor maydon (o'ylab
+    // topilmagan matn emas), stories'ni "Ma'lumot beruvchi"/"Atmosferali
+    // video" deb aniqroq ko'rsatadi; postlarda bunday qo'shimcha
+    // ma'lumot yo'q, shunchaki raqami ko'rsatiladi.
+    const kindDetail = row.type === "s" && row.story_kind ? STORY_KIND_LABEL_UZ[row.story_kind] : null;
+    return {
+      name: row.user_name || "—",
+      avatar: initials(row.user_name),
+      label: `${kindLabel} #${row.seq_number}`,
+      detail: kindDetail,
+      projectLabel: row.project_label,
+      time: fmtTime(row.done_at),
+    };
+  });
+}
+
+// NShop — devor ekranida omborning joriy holati va shu oy sotilgani.
+// Faqat "qoldiq" nisbati bo'yicha eng kam qolganlar birinchi (tezkor
+// e'tibor kerak bo'lganlar), NShop admin panelidagi "E'tibor talab
+// qiladi" mantig'iga mos.
+async function getNShopStats(monthStart, monthEndExclusive) {
+  const productsR = await db.query(`
+    select id, name, stock, stock_capacity
+    from ncoin_products
+    where is_archived = false and is_visible = true and stock_capacity > 0
+    order by (stock::float / nullif(stock_capacity, 0)) asc
+    limit 6
+  `);
+  const productIds = productsR.rows.map((row) => String(row.id));
+  let purchasedByProduct = new Map();
+  if (productIds.length) {
+    const purchR = await db.query(
+      `select reference_id, count(*) as n
+       from ncoin_transactions
+       where reason = 'purchase' and reference_type = 'product'
+         and reference_id = any($1::text[])
+         and created_at >= $2::date and created_at < $3::date
+       group by reference_id`,
+      [productIds, monthStart, monthEndExclusive],
+    );
+    purchasedByProduct = new Map(purchR.rows.map((row) => [row.reference_id, Number(row.n)]));
+  }
+  const totalStockR = await db.query(
+    `select coalesce(sum(stock), 0)::int as total from ncoin_products where is_archived = false and is_visible = true`,
+  );
+  const monthR = await db.query(
+    `select count(*) as n, coalesce(-sum(amount), 0)::float as spent
+     from ncoin_transactions
+     where reason = 'purchase' and created_at >= $1::date and created_at < $2::date`,
+    [monthStart, monthEndExclusive],
+  );
+  return {
+    totalStock: Number(totalStockR.rows[0].total),
+    products: productsR.rows.map((row) => ({
+      name: row.name,
+      stock: row.stock,
+      capacity: row.stock_capacity,
+      pct: row.stock_capacity > 0 ? Math.round((row.stock / row.stock_capacity) * 100) : 0,
+      purchasedThisMonth: purchasedByProduct.get(String(row.id)) || 0,
+    })),
+    monthPurchaseCount: Number(monthR.rows[0].n),
+    monthNcoinSpent: Number(monthR.rows[0].spent),
+  };
 }
 
 // "Qarsak" bildirishnomasi uchun — `since`dan keyin bajarilgan post/
@@ -213,7 +273,7 @@ async function getTodayFeed(today) {
 // so'rov sifatida) so'rab, yangi hodisa chiqsa tabriklov modalini
 // ko'rsatadi.
 async function getCelebrations(since) {
-  const [checksR, tasksR] = await Promise.all([
+  const [checksR, tasksR, coinR] = await Promise.all([
     db.query(
       `select c.type, c.seq_number, c.done_at as at, p.label as project_label,
               coalesce(nullif(trim(concat(u.first_name, ' ', u.last_name)), ''), u.username) as user_name
@@ -233,6 +293,19 @@ async function getCelebrations(since) {
        join users u on u.id = t.assignee_user_id
        where t.status = 'done' and t.completed_at is not null and t.completed_at > $1
        order by t.completed_at asc
+       limit 20`,
+      [since],
+    ),
+    // Admin profilidan qo'lda berilgan Ncoin — faqat MUSBAT miqdor
+    // (mukofot) tabriklashga loyiq; ayirish (manfiy tuzatish) hech
+    // qachon bu ro'yxatga tushmaydi.
+    db.query(
+      `select t.amount, t.created_at as at,
+              coalesce(nullif(trim(concat(u.first_name, ' ', u.last_name)), ''), u.username) as user_name
+       from ncoin_transactions t
+       join users u on u.id = t.user_id
+       where t.reason = 'admin_adjustment' and t.amount > 0 and t.created_at > $1
+       order by t.created_at asc
        limit 20`,
       [since],
     ),
@@ -256,8 +329,17 @@ async function getCelebrations(since) {
       detail: row.title,
       at: row.at,
     }));
+  const coinEvents = coinR.rows
+    .filter((row) => row.user_name)
+    .map((row) => ({
+      name: row.user_name,
+      kind: "coin",
+      label: "Ncoin",
+      detail: `+${Number(row.amount)} Ncoin`,
+      at: row.at,
+    }));
 
-  return [...checkEvents, ...taskEvents].sort((a, b) => new Date(a.at) - new Date(b.at));
+  return [...checkEvents, ...taskEvents, ...coinEvents].sort((a, b) => new Date(a.at) - new Date(b.at));
 }
 
 async function getOnTimePct(rangeStart, rangeEnd) {
@@ -339,6 +421,10 @@ async function getWallStats() {
       contributor: topContributors.get(row.cycle_id) || null,
       doneCount: row.done_k + row.done_s,
       targetCount: row.posts_target + row.stories_target,
+      doneK: row.done_k,
+      k: row.posts_target,
+      doneS: row.done_s,
+      s: row.stories_target,
       remaining,
       ...tempo,
     };
@@ -362,13 +448,14 @@ async function getWallStats() {
     return scoreOf(b) - scoreOf(a);
   });
 
-  const [employees, todayFeed, onTimePct, onTimePctPrevMonth, overdue, activity30d] = await Promise.all([
+  const [employees, todayFeed, onTimePct, onTimePctPrevMonth, overdue, activity30d, nshop] = await Promise.all([
     getEmployeeLeaderboard(monthStart, today, projectsById),
     getTodayFeed(today),
     getOnTimePct(monthStart, addDays(today, 1)),
     getOnTimePct(prevMonthStart, monthStart),
     getOverdueTasks(today),
     getActivity30d(today),
+    getNShopStats(monthStart, addDays(today, 1)),
   ]);
 
   const teamDoneCount = projectRows.reduce((sum, row) => sum + row.done_k + row.done_s, 0);
@@ -393,10 +480,13 @@ async function getWallStats() {
       onTimePctPrevMonth,
       todayDoneCount: todayFeed.length,
       todayActiveCount: new Set(todayFeed.map((f) => f.name)).size,
+      todayPostCount: todayFeed.filter((f) => f.label.indexOf("Post") === 0).length,
+      todayStoriesCount: todayFeed.filter((f) => f.label.indexOf("Stories") === 0).length,
       overdueCount: overdue.count,
       overdueProjectCount: overdue.projectCount,
     },
     activity30d,
+    nshop,
   };
 }
 
