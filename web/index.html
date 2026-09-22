@@ -457,11 +457,19 @@
   });
 
   // ── Clock ──
+  // Televizor/qurilmaning o'z sistema soat mintaqasidan MUSTAQIL —
+  // O'zbekiston doim UTC+5 (DST yo'q), shu sabab eng ishonchli yo'l
+  // Intl/timeZone'ga (eski qurilmalarda to'liq qo'llab-quvvatlanmasligi
+  // mumkin) tayanmasdan, UTC vaqtiga qo'lda +5 soat qo'shib UTC
+  // getter'lari bilan o'qish.
   var lastUpdatedAt = null;
+  function tashkentNow() {
+    return new Date(Date.now() + 5 * 3600 * 1000);
+  }
   function tickClock() {
-    var now = new Date();
-    $("clock").textContent = pad2(now.getHours()) + ":" + pad2(now.getMinutes());
-    $("clock-date").textContent = WEEKDAYS[now.getDay()] + ", " + now.getDate() + "-" + MONTHS[now.getMonth()].toLowerCase();
+    var now = tashkentNow();
+    $("clock").textContent = pad2(now.getUTCHours()) + ":" + pad2(now.getUTCMinutes());
+    $("clock-date").textContent = WEEKDAYS[now.getUTCDay()] + ", " + now.getUTCDate() + "-" + MONTHS[now.getUTCMonth()].toLowerCase();
     if (lastUpdatedAt) {
       var mins = Math.max(0, Math.round((Date.now() - lastUpdatedAt) / 60000));
       $("updated-label").textContent = mins === 0 ? "Hozirgina yangilandi" : mins + " daqiqa oldin yangilandi";
