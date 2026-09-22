@@ -612,7 +612,7 @@
   function feedRowHtml(f) {
     var title = f.label + (f.detail ? " · " + f.detail : "");
     return (
-      '<div class="feed-row" style="flex:1;display:flex;align-items:center;gap:14px;min-height:0">' +
+      '<div class="feed-row" style="flex:0 0 auto;padding:14px 0;display:flex;align-items:center;gap:14px">' +
       '<div style="width:42px;height:42px;border-radius:13px;background:rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;font:600 16px Sora,sans-serif;color:#fff;flex:none">' + esc(f.avatar) + '</div>' +
       '<div style="flex:1;min-width:0"><div style="font:600 19px Sora,sans-serif;color:#fff;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(title) + '</div><div style="font:400 16px Sora,sans-serif;color:rgba(255,255,255,.66);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(f.name) + ' · ' + esc(f.projectLabel) + '</div></div>' +
       '<div style="font:500 16px Sora,sans-serif;color:rgba(255,255,255,.7);flex:none;font-variant-numeric:tabular-nums">' + esc(f.time) + '</div>' +
