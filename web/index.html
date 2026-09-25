@@ -431,40 +431,167 @@
   // ikkalasidan ham mustaqil ishlaydi — shu holatda faqat TV sozlamalari
   // (Settings → Energy Saving) orqali to'liq o'chirish mumkin.
   var wakeLock = null;
-  async function keepScreenAwake() {
-    try {
-      if ("wakeLock" in navigator) {
-        wakeLock = await navigator.wakeLock.request("screen");
-        wakeLock.addEventListener("release", function () {
-          wakeLock = null;
-        });
-      }
-    } catch (e) {
-      console.warn("Wake Lock so'ralmadi:", e.message);
+  var wakeVideoEl = null;
+  var wakeDrawTimer = null;
+  var wakeDebug = /[?&]wake-debug=1/.test(location.search);
+  var wakeState = { lock: "—", video: "—" };
+
+  // Diagnostika: ?wake-debug=1 bilan ochilsa, burchakda holat ko'rinadi.
+  // Busiz Wake Lock berilgan-berilmaganini, video ijro bo'lgan-bo'lmaganini
+  // umuman bilib bo'lmasdi — muammo qidirishda ko'r-ko'rona taxmin qilardik.
+  function wakeLog(key, value) {
+    wakeState[key] = value;
+    console.log("[uyg'oq] " + key + ": " + value);
+    if (!wakeDebug) return;
+    var el = document.getElementById("wake-debug");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "wake-debug";
+      el.style.cssText =
+        "position:fixed;left:8px;bottom:8px;z-index:9999;font:12px/1.5 monospace;" +
+        "background:rgba(0,0,0,.78);color:#3ddc6b;padding:6px 10px;border-radius:6px;white-space:pre";
+      document.body.appendChild(el);
     }
-    startFallbackVideoLoop();
+    el.textContent = "Wake Lock: " + wakeState.lock + "\nVideo: " + wakeState.video;
   }
-  document.addEventListener("visibilitychange", function () {
-    if (document.visibilityState === "visible" && !wakeLock && "wakeLock" in navigator) {
-      keepScreenAwake();
+
+  async function requestWakeLock() {
+    if (!("wakeLock" in navigator)) {
+      wakeLog("lock", "qo'llab-quvvatlanmaydi");
+      return;
     }
+    if (wakeLock) return;
+    try {
+      wakeLock = await navigator.wakeLock.request("screen");
+      wakeLog("lock", "berildi");
+      wakeLock.addEventListener("release", function () {
+        wakeLock = null;
+        wakeLog("lock", "bo'shadi");
+      });
+    } catch (e) {
+      wakeLog("lock", "rad etildi — " + e.message);
+    }
+  }
+
+  function keepScreenAwake() {
+    requestWakeLock();
+    startKeepAwakeVideo();
+    // Qulf tizim hodisasi yoki fokus yo'qolishi sababli bo'shab ketishi
+    // mumkin, va "release" hodisasi har doim ham kelavermaydi — shu sabab
+    // uni davriy qayta so'raymiz. Arzon: qulf bor bo'lsa, so'rov umuman
+    // yuborilmaydi (yuqoridagi `if (wakeLock) return`).
+    setInterval(requestWakeLock, 30000);
+    // Ba'zi platformalar media sessiyasi "playing" bo'lsa ham ekranni
+    // uyg'oq tutadi — bu bepul qo'shimcha imkoniyat.
+    try {
+      if (navigator.mediaSession) navigator.mediaSession.playbackState = "playing";
+    } catch (e) {}
+  }
+
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState !== "visible") return;
+    requestWakeLock();
+    // Ekran qaytganda video ham to'xtagan bo'lishi mumkin.
+    if (wakeVideoEl) wakeVideoEl.play().catch(function () {});
   });
-  function startFallbackVideoLoop() {
+
+  // ── Zaxira: HAQIQIY video ijrosi ──
+  // Nega avvalgi canvas oqimi yetarli emasligi aniqlandi: quvvat
+  // menejerlari "video ijro etilyapti" degan xulosaga dekoder ishlayotganiga
+  // va kadrlar ko'rinadigan yuzaga chiqayotganiga qarab keladi. Jonli
+  // captureStream() oqimi dekoderdan UMUMAN o'tmaydi, `opacity:0` va bir
+  // piksel o'lcham esa uni "ko'rinmaydi" toifasiga tushiradi — ko'p
+  // qurilmalar bunday ijroni hisobga olmaydi. Kino esa aynan shu uchtasi
+  // bilan farq qiladi.
+  //
+  // Shuning uchun avval MediaRecorder orqali bir soniyalik HAQIQIY webm
+  // yozib olamiz va uni loop qilib qo'yamiz — bu chinakam dekoderdan
+  // o'tadi. MediaRecorder bo'lmasa (eski webOS) eski usul zaxira bo'lib
+  // qoladi.
+  //
+  // Element ataylab `opacity:0` EMAS va `display:none` EMAS: to'liq
+  // shaffof yoki chizilmaydigan elementni ba'zi platformalar ijro deb
+  // hisoblamaydi. 8x8 piksel, deyarli shaffof — devor ekranida sezilmaydi.
+  function makeWakeVideo(src, stream) {
+    var v = document.createElement("video");
+    if (stream) v.srcObject = stream;
+    else v.src = src;
+    v.loop = true;
+    v.muted = true;
+    v.defaultMuted = true;
+    v.playsInline = true;
+    v.setAttribute("muted", "");
+    v.setAttribute("playsinline", "");
+    v.setAttribute("aria-hidden", "true");
+    v.style.cssText =
+      "position:fixed;right:0;bottom:0;width:8px;height:8px;opacity:.02;pointer-events:none";
+    document.body.appendChild(v);
+    v.play().then(
+      function () {
+        wakeLog("video", stream ? "jonli oqim (zaxira)" : "yozilgan webm");
+      },
+      function (e) {
+        wakeLog("video", "ijro bo'lmadi — " + e.message);
+      },
+    );
+    return v;
+  }
+
+  function startKeepAwakeVideo() {
+    if (wakeVideoEl) return;
     try {
       var canvas = document.createElement("canvas");
-      canvas.width = 2;
-      canvas.height = 2;
-      var stream = canvas.captureStream ? canvas.captureStream(1) : null;
-      if (!stream) return;
-      var video = document.createElement("video");
-      video.srcObject = stream;
-      video.muted = true;
-      video.playsInline = true;
-      video.setAttribute("aria-hidden", "true");
-      video.style.cssText = "position:fixed;width:1px;height:1px;opacity:0;pointer-events:none";
-      document.body.appendChild(video);
-      video.play().catch(function () {});
-    } catch (e) { /* qo'llab-quvvatlanmasa ham dashboard davom etaveradi */ }
+      canvas.width = 16;
+      canvas.height = 16;
+      var ctx = canvas.getContext("2d");
+      var stream = canvas.captureStream ? canvas.captureStream(15) : null;
+      if (!stream) {
+        wakeLog("video", "captureStream yo'q");
+        return;
+      }
+      // O'zgarmaydigan kanvasdan ba'zi brauzerlar umuman kadr chiqarmaydi —
+      // shu sabab yozish davomida ranglarni almashtirib turamiz.
+      var frame = 0;
+      wakeDrawTimer = setInterval(function () {
+        frame++;
+        ctx.fillStyle = frame % 2 ? "#000000" : "#010101";
+        ctx.fillRect(0, 0, 16, 16);
+      }, 66);
+
+      if (!window.MediaRecorder) {
+        wakeVideoEl = makeWakeVideo(null, stream);
+        return;
+      }
+      var chunks = [];
+      var rec = new MediaRecorder(stream);
+      rec.ondataavailable = function (e) {
+        if (e.data && e.data.size) chunks.push(e.data);
+      };
+      rec.onstop = function () {
+        var blob = null;
+        try {
+          blob = new Blob(chunks, { type: chunks[0] ? chunks[0].type : "video/webm" });
+        } catch (e) {}
+        if (blob && blob.size > 0) {
+          // Yozilgan fayl bor — jonli oqim endi kerak emas, to'xtatamiz
+          // (kanvas chizishi ham, oqim treklari ham bekorga ishlamasin).
+          clearInterval(wakeDrawTimer);
+          wakeDrawTimer = null;
+          try {
+            stream.getTracks().forEach(function (t) { t.stop(); });
+          } catch (e) {}
+          wakeVideoEl = makeWakeVideo(URL.createObjectURL(blob), null);
+        } else {
+          wakeVideoEl = makeWakeVideo(null, stream);
+        }
+      };
+      rec.start();
+      setTimeout(function () {
+        try { rec.stop(); } catch (e) {}
+      }, 1000);
+    } catch (e) {
+      wakeLog("video", "xato — " + e.message);
+    }
   }
 
   // ── Moslashuvchan kanvas ──
