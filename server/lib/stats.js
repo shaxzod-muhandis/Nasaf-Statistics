@@ -15,7 +15,16 @@ const MONTHS_UZ = [
   "Iyul", "Avgust", "Sentabr", "Oktabr", "Noyabr", "Dekabr",
 ];
 
-const TEMPO_MARGIN = 5; // foiz punkti — shundan kam farq "Rejada" hisoblanadi
+// Loyiha holati BAJARILGAN va KUTILGAN foiz orasidagi farq bo'yicha
+// aniqlanadi (foiz punktida):
+//   0–5   → Rejada        (ko'k)
+//   5–12  → Ortda         (sariq)
+//   12+   → Jiddiy ortda  (qizil)
+// Avval bu chegara vazifa SONI bilan solishtirilardi ("5 ta vazifa
+// orqada"), shuning uchun katta loyihalarda deyarli hammasi "Ortda"
+// bo'lib chiqardi.
+const TEMPO_OK_GAP = 5;
+const TEMPO_WARN_GAP = 12;
 
 // Asosiy loyihadagi notify.js#projectPct bilan bir xil — Post 70%,
 // Stories 30% og'irlikda (faqat bittasi bo'lsa, o'sha 100%).
@@ -102,26 +111,32 @@ function classifyProject(row, today) {
 
   const daysElapsed = dayDiff(row.period_start, today) + 1;
   const totalDays = dayDiff(row.period_start, row.period_end) + 1;
-  const expectedPct = Math.min(100, Math.max(0, (daysElapsed / totalDays) * 100));
+  const expectedPct = Math.round(Math.min(100, Math.max(0, (daysElapsed / totalDays) * 100)));
   const expectedItems = Math.round((expectedPct / 100) * (row.posts_target + row.stories_target));
   const actualItems = row.done_k + row.done_s;
   const delta = actualItems - expectedItems;
 
+  // Rangni AYNAN ekranda ko'rinadigan raqamlar belgilaydi (ikkalasi ham
+  // yaxlitlangan) — shunda ko'rsatkich bilan rang hech qachon
+  // qarama-qarshi tushmaydi.
+  const gap = expectedPct - donePct;
   let status = "onTrack";
   let statusLabel = "Rejada";
-  if (delta >= TEMPO_MARGIN) {
-    status = "ahead";
-    statusLabel = "Oldinda";
-  } else if (delta <= -TEMPO_MARGIN) {
+  if (gap > TEMPO_WARN_GAP) {
+    status = "late";
+    statusLabel = "Jiddiy ortda";
+  } else if (gap > TEMPO_OK_GAP) {
     status = "behind";
     statusLabel = "Ortda";
   }
 
+  // Matn holatdan mustaqil — vazifa soni bo'yicha aniq xabar beradi
+  // (rejadan oldinda ketayotgan loyiha ham shu yerda ko'rinadi).
   const remaining = row.posts_target + row.stories_target - actualItems;
   const deltaText =
-    status === "ahead"
+    delta > 0
       ? `Tempodan ${delta} vazifa oldinda`
-      : status === "behind"
+      : delta < 0
         ? `Tempodan ${Math.abs(delta)} vazifa orqada`
         : `Tempoda · ${remaining} vazifa qoldi`;
 
@@ -130,7 +145,7 @@ function classifyProject(row, today) {
     statusLabel,
     daysLabel: `${dayDiff(today, row.period_end)} kun qoldi`,
     donePct,
-    expectedPct: Math.round(expectedPct),
+    expectedPct,
     deltaText,
   };
 }
@@ -437,10 +452,11 @@ async function getWallStats() {
   });
 
   // Xodimlar paneli kabi — eng yaxshi natijali loyiha birinchi bo'lib
-  // chiqadi (alifbo tartibi o'rniga). Avval holat bo'yicha (Oldinda >
-  // Rejada > Ortda > Qarz), so'ng har bir holat ichida darajasi bo'yicha
-  // (tempodan qanchalik oldinda/ortda, Qarz uchun — qancha kam qolgan).
-  const STATUS_RANK = { ahead: 3, onTrack: 2, behind: 1, debt: 0 };
+  // chiqadi (alifbo tartibi o'rniga). Avval holat bo'yicha (Rejada >
+  // Ortda > Jiddiy ortda > Qarz), so'ng har bir holat ichida darajasi
+  // bo'yicha (rejadan qanchalik oldinda/ortda, Qarz uchun — qancha kam
+  // qolgan).
+  const STATUS_RANK = { onTrack: 3, behind: 2, late: 1, debt: 0 };
   projects.sort((a, b) => {
     const rankDiff = STATUS_RANK[b.status] - STATUS_RANK[a.status];
     if (rankDiff !== 0) return rankDiff;
