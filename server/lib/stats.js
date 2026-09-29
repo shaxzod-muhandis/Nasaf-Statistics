@@ -112,7 +112,8 @@ function classifyProject(row, today) {
   // To'liq bajarilgan loyiha — alohida, eng yaxshi holat. Tempo bilan
   // solishtirishning ma'nosi yo'q: ish tugagan, "necha foiz orqada"
   // degan savol qolmaydi.
-  if (row.done_k >= row.posts_target && row.done_s >= row.stories_target) {
+  const hasTarget = row.posts_target > 0 || row.stories_target > 0;
+  if (hasTarget && row.done_k >= row.posts_target && row.done_s >= row.stories_target) {
     return {
       status: "done",
       statusLabel: "Bajarildi",
