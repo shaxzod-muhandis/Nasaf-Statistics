@@ -109,6 +109,19 @@ function classifyProject(row, today) {
     };
   }
 
+  // To'liq bajarilgan loyiha — alohida, eng yaxshi holat. Tempo bilan
+  // solishtirishning ma'nosi yo'q: ish tugagan, "necha foiz orqada"
+  // degan savol qolmaydi.
+  if (row.done_k >= row.posts_target && row.done_s >= row.stories_target) {
+    return {
+      status: "done",
+      statusLabel: "Bajarildi",
+      daysLabel: `${dayDiff(today, row.period_end)} kun qoldi`,
+      donePct,
+      deltaText: "Barcha vazifalar bajarildi",
+    };
+  }
+
   const daysElapsed = dayDiff(row.period_start, today) + 1;
   const totalDays = dayDiff(row.period_start, row.period_end) + 1;
   const expectedPct = Math.round(Math.min(100, Math.max(0, (daysElapsed / totalDays) * 100)));
@@ -450,11 +463,14 @@ async function getWallStats() {
   // Ortda > Jiddiy ortda > Qarz), so'ng har bir holat ichida darajasi
   // bo'yicha (rejadan qanchalik oldinda/ortda, Qarz uchun — qancha kam
   // qolgan).
-  const STATUS_RANK = { onTrack: 3, behind: 2, late: 1, debt: 0 };
+  const STATUS_RANK = { done: 4, onTrack: 3, behind: 2, late: 1, debt: 0 };
   projects.sort((a, b) => {
     const rankDiff = STATUS_RANK[b.status] - STATUS_RANK[a.status];
     if (rankDiff !== 0) return rankDiff;
-    const scoreOf = (p) => (p.status === "debt" ? -p.remaining : p.donePct - p.expectedPct);
+    // Bajarilganlarda `expectedPct` yo'q (ko'rsatkich chizilmaydi) —
+    // ular o'zaro foiz bo'yicha solishtiriladi.
+    const scoreOf = (p) =>
+      p.status === "debt" ? -p.remaining : p.status === "done" ? p.donePct : p.donePct - p.expectedPct;
     return scoreOf(b) - scoreOf(a);
   });
 
