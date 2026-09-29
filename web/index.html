@@ -237,7 +237,7 @@
             <div style="flex:1"></div>
             <div id="project-status-filter" style="display:flex;align-items:center;gap:8px"></div>
           </div>
-          <div id="projects-grid" style="flex:1;display:grid;grid-auto-rows:minmax(210px, 1fr);gap:16px;padding:18px;overflow:hidden;min-width:0"></div>
+          <div id="projects-grid" style="flex:1;display:grid;grid-auto-rows:minmax(150px, 1fr);gap:14px;padding:16px;overflow:hidden;min-width:0"></div>
         </div>
 
         <div style="display:flex;flex-direction:column;gap:22px;overflow:hidden">
@@ -781,7 +781,7 @@
 
   function renderProjects(projects) {
     var filtered = projectStatusFilter === "all" ? projects : projects.filter(function (p) { return p.status === projectStatusFilter; });
-    $("projects-count-label").textContent = projects.length + " faol · tempo bo'yicha";
+    $("projects-count-label").textContent = projects.length + " faol loyiha";
     projectItemsCache = filtered;
     projectPageIndex = 0;
     startProjectRotation();
@@ -791,26 +791,40 @@
   // `minmax(0,1fr)` — ustun o'z tarkibidan kengaymasligi uchun MAJBURIY
   // (oddiy `1fr` da uzun nom to'rni gorizontal toshirib yuborardi).
   function applyProjectColumns(count) {
-    var cols = isMobileLayout() ? 1 : innerWidth <= 1400 ? 2 : count > 6 ? 4 : 3;
+    var cols = isMobileLayout() ? 1 : innerWidth <= 1400 ? 2 : count > 4 ? 4 : count;
     cols = Math.max(1, Math.min(cols, count || 1));
     $("projects-grid").style.gridTemplateColumns = "repeat(" + cols + ", minmax(0, 1fr))";
   }
 
-  // Bir sahifaga nechta kartochka sig'ishini o'lchab topadi: hammasini
-  // chizib, toshgan bo'lsa bittadan kamaytirib boradi. Kartochka
-  // balandligi tarkibga (nom necha qatorga tushishiga) bog'liq bo'lgani
-  // uchun formula bilan hisoblab bo'lmaydi.
+  // Bir sahifaga nechta kartochka sig'ishini hisoblaydi.
+  //
+  // Diqqat: "hammasini chizib, toshdimi?" degan tekshiruv ISHLAMAYDI —
+  // `grid-auto-rows` qatorlarni siqib, kartochka tarkibini jimgina
+  // kesib yuboradi (kartochkada `overflow:hidden` bor) va to'r
+  // "toshmagan" bo'lib ko'rinadi. Shuning uchun kartochkaning TABIIY
+  // balandligi alohida namuna orqali o'lchanadi va nechta qator
+  // sig'ishi shundan hisoblanadi.
   function measureProjectPageSize(list) {
     var g = $("projects-grid");
     if (!list.length) return 0;
     if (isMobileLayout()) return list.length; // mobilda oddiy aylantirish
-    var n = list.length;
-    while (n > 1) {
-      g.innerHTML = list.slice(0, n).map(projectCardHtml).join("");
-      if (g.scrollHeight <= g.clientHeight + 1) break;
-      n--;
-    }
-    return n;
+    var cs = getComputedStyle(g);
+    var colList = cs.gridTemplateColumns.split(" ");
+    var cols = Math.max(1, colList.length);
+    var colW = parseFloat(colList[0]) || 300;
+    var gap = parseFloat(cs.rowGap) || 14;
+    var padY = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+
+    var probe = document.createElement("div");
+    probe.style.cssText = "position:absolute;visibility:hidden;pointer-events:none;width:" + colW + "px";
+    probe.innerHTML = projectCardHtml(list[0]);
+    g.appendChild(probe);
+    var cardH = (probe.firstChild && probe.firstChild.offsetHeight) || 200;
+    g.removeChild(probe);
+
+    var avail = g.clientHeight - padY;
+    var rows = Math.max(1, Math.floor((avail + gap) / (cardH + gap)));
+    return Math.max(1, rows * cols);
   }
 
   function startProjectRotation() {
@@ -876,22 +890,17 @@
       '<div style="font:500 17px Sora,sans-serif;color:' + (p.status === "debt" ? color : "#4B5563") + '">' + esc(p.daysLabel) + '</div>' +
       '</div>' +
       '<div style="font:600 27px Sora,sans-serif;color:#0f172a;letter-spacing:-.025em;margin-top:13px;min-width:0;overflow-wrap:anywhere">' + esc(p.label) + '</div>' +
-      '<div style="display:flex;align-items:center;gap:9px;margin-top:9px">' +
-      (p.contributor
-        ? '<div style="width:28px;height:28px;border-radius:9px;background:#EDEFF2;display:flex;align-items:center;justify-content:center;font:600 12px Sora,sans-serif;color:#0f172a;flex:none">' + esc(p.contributor.slice(0, 1)) + '</div><div style="font:400 17px Sora,sans-serif;color:#4B5563;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(p.contributor) + '</div>'
-        : '') +
-      '<div style="flex:1;min-width:8px"></div>' +
-      '<div style="display:flex;align-items:center;gap:8px;flex:none">' +
+      '<div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap">' +
       countPairHtml(p.doneK, p.k, "post") +
       '<div style="width:1px;height:14px;background:rgba(15,23,42,.16)"></div>' +
       countPairHtml(p.doneS, p.s, "stories") +
-      '</div></div>' +
+      '</div>' +
       '<div style="flex:1"></div>' +
       '<div style="display:flex;align-items:flex-end;gap:11px"><div style="font:600 44px/1 Sora,sans-serif;color:' + pctColor + ';letter-spacing:-.03em;font-variant-numeric:tabular-nums">' + p.donePct + '<span style="font-size:24px">%</span></div><div style="font:500 19px Sora,sans-serif;color:#4B5563;padding-bottom:5px;font-variant-numeric:tabular-nums">' + p.doneCount + '/' + p.targetCount + '</div></div>' +
       // Chiziq o'rami — ko'rsatkich va uning tepasidagi "Reja NN%"
       // yorlig'i chiziqdan tashqarida turadi (chiziqning o'zida
       // `overflow:hidden` bor, aks holda ular qirqilib ketardi).
-      '<div style="margin-top:29px;position:relative">' +
+      '<div style="margin-top:26px;margin-bottom:2px;position:relative">' +
       (p.status !== "debt" && exp != null
         ? '<div style="position:absolute;left:' + exp + '%;transform:' + expShift + ';top:-19px;font:600 13px Sora,sans-serif;color:#6B7280;white-space:nowrap;font-variant-numeric:tabular-nums">Reja ' + exp + '%</div>'
         : "") +
@@ -900,7 +909,6 @@
       '</div>' +
       (p.status !== "debt" && exp != null ? '<div style="position:absolute;left:' + exp + '%;top:-4px;bottom:-4px;width:3px;background:#0f172a;border-radius:2px"></div>' : "") +
       '</div>' +
-      '<div style="font:' + (p.status === "debt" ? "600" : "500") + ' 17px Sora,sans-serif;color:' + (STATUS_TEXT[p.status] || "#374151") + ';margin-top:9px">' + esc(p.deltaText) + '</div>' +
       '</div>'
     );
   }

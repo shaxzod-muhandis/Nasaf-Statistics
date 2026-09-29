@@ -71,31 +71,6 @@ async function getActiveProjectsWithCycles() {
   return r.rows;
 }
 
-// Diqqat: checks.editor_id/videographer_id juda kamdan-kam to'ldiriladi
-// (real bazada 663 tadan atigi 18 tasida) — asosiy, deyarli har doim
-// mavjud maydon done_by (kim ilovada belgini bosgan, users.id). Shu
-// sababli "kim qildi" barcha joyda done_by/users asosida hisoblanadi,
-// staff/editor-videographer emas (bu — dastlabki loyihada noto'g'ri
-// taxmin qilingan edi, lokal test paytida haqiqiy ma'lumot bilan
-// tekshirilib tuzatildi).
-async function getTopContributors(cycleIds) {
-  if (!cycleIds.length) return new Map();
-  const r = await db.query(
-    `select distinct on (cycle_id) cycle_id, name
-     from (
-       select c.cycle_id, u.id as user_id,
-              coalesce(nullif(trim(concat(u.first_name, ' ', u.last_name)), ''), u.username) as name,
-              count(*) as n
-       from checks c
-       join users u on u.id = c.done_by
-       where c.cycle_id = any($1::uuid[])
-       group by c.cycle_id, u.id, name
-     ) agg
-     order by cycle_id, n desc`,
-    [cycleIds],
-  );
-  return new Map(r.rows.map((row) => [row.cycle_id, row.name]));
-}
 
 function classifyProject(row, today) {
   const isOverdue = row.period_end < today && (row.done_k < row.posts_target || row.done_s < row.stories_target);
@@ -107,7 +82,6 @@ function classifyProject(row, today) {
       statusLabel: "Qarz",
       daysLabel: `${dayDiff(row.period_end, today)} kun kechikdi`,
       donePct,
-      deltaText: `${row.posts_target + row.stories_target - row.done_k - row.done_s} vazifa muddatdan chiqdi`,
     };
   }
 
@@ -121,17 +95,12 @@ function classifyProject(row, today) {
       statusLabel: "Bajarildi",
       daysLabel: `${dayDiff(today, row.period_end)} kun qoldi`,
       donePct,
-      deltaText: "Barcha vazifalar bajarildi",
     };
   }
 
   const daysElapsed = dayDiff(row.period_start, today) + 1;
   const totalDays = dayDiff(row.period_start, row.period_end) + 1;
   const expectedPct = Math.round(Math.min(100, Math.max(0, (daysElapsed / totalDays) * 100)));
-  const expectedItems = Math.round((expectedPct / 100) * (row.posts_target + row.stories_target));
-  const actualItems = row.done_k + row.done_s;
-  const delta = actualItems - expectedItems;
-
   // Rangni AYNAN ekranda ko'rinadigan raqamlar belgilaydi (ikkalasi ham
   // yaxlitlangan) — shunda ko'rsatkich bilan rang hech qachon
   // qarama-qarshi tushmaydi.
@@ -150,23 +119,12 @@ function classifyProject(row, today) {
     statusLabel = "Oldinda";
   }
 
-  // Matn holatdan mustaqil — vazifa soni bo'yicha aniq xabar beradi
-  // (rejadan oldinda ketayotgan loyiha ham shu yerda ko'rinadi).
-  const remaining = row.posts_target + row.stories_target - actualItems;
-  const deltaText =
-    delta > 0
-      ? `Tempodan ${delta} vazifa oldinda`
-      : delta < 0
-        ? `Tempodan ${Math.abs(delta)} vazifa orqada`
-        : `Tempoda · ${remaining} vazifa qoldi`;
-
   return {
     status,
     statusLabel,
     daysLabel: `${dayDiff(today, row.period_end)} kun qoldi`,
     donePct,
     expectedPct,
-    deltaText,
   };
 }
 
@@ -437,9 +395,6 @@ async function getWallStats() {
   const prevMonthStart = prevMonthEnd.slice(0, 8) + "01";
 
   const projectRows = await getActiveProjectsWithCycles();
-  const cycleIds = projectRows.map((row) => row.cycle_id);
-  const topContributors = await getTopContributors(cycleIds);
-
   const projectsById = new Map();
   let soonestDaysLeft = null;
   const projects = projectRows.map((row) => {
@@ -447,7 +402,6 @@ async function getWallStats() {
     const remaining = Math.max(0, row.posts_target + row.stories_target - row.done_k - row.done_s);
     const entry = {
       label: row.label,
-      contributor: topContributors.get(row.cycle_id) || null,
       doneCount: row.done_k + row.done_s,
       targetCount: row.posts_target + row.stories_target,
       doneK: row.done_k,
