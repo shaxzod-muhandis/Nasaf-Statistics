@@ -292,14 +292,14 @@
   // Holat — rejadan necha FOIZ orqada ekaniga qarab (server/lib/stats.js):
   // 0–5 ko'k, 5–12 sariq, undan ko'pi qizil. "Qarz" — davri tugagan,
   // alohida (quyuqroq qizil va qalinroq ramka bilan ajratiladi).
-  var STATUS_COLOR = { done: "#16a34a", onTrack: "#2f7ab9", behind: "#ca8a04", late: "#dc2626", debt: "#b91c1c" };
-  var STATUS_BG = { done: "#F6FCF8", onTrack: "#FBFCFE", behind: "#FEFCF3", late: "#FFFAFA", debt: "#FFF5F5" };
+  var STATUS_COLOR = { done: "#16a34a", ahead: "#16a34a", onTrack: "#2f7ab9", behind: "#ca8a04", late: "#dc2626", debt: "#b91c1c" };
+  var STATUS_BG = { done: "#F6FCF8", ahead: "#F6FCF8", onTrack: "#FBFCFE", behind: "#FEFCF3", late: "#FFFAFA", debt: "#FFF5F5" };
   // Sariq ustida oq yozuv o'qilmaydi — TV uzoqdan ko'riladi.
-  var STATUS_INK = { done: "#fff", onTrack: "#fff", behind: "#3d2f04", late: "#fff", debt: "#fff" };
+  var STATUS_INK = { done: "#fff", ahead: "#fff", onTrack: "#fff", behind: "#3d2f04", late: "#fff", debt: "#fff" };
   // Kartochka ostidagi izoh matni uchun quyuqroq variant.
-  var STATUS_TEXT = { done: "#15803d", onTrack: "#374151", behind: "#7d6608", late: "#b91c1c", debt: "#b91c1c" };
-  var STATUS_LABEL = { done: "Bajarildi", onTrack: "Rejada", behind: "Ortda", late: "Jiddiy ortda", debt: "Qarz" };
-  var STATUS_ORDER = ["done", "onTrack", "behind", "late", "debt"];
+  var STATUS_TEXT = { done: "#15803d", ahead: "#15803d", onTrack: "#374151", behind: "#7d6608", late: "#b91c1c", debt: "#b91c1c" };
+  var STATUS_LABEL = { done: "Bajarildi", ahead: "Oldinda", onTrack: "Rejada", behind: "Ortda", late: "Jiddiy ortda", debt: "Qarz" };
+  var STATUS_ORDER = ["done", "ahead", "onTrack", "behind", "late", "debt"];
   var WEEKDAYS = ["Yakshanba","Dushanba","Seshanba","Chorshanba","Payshanba","Juma","Shanba"];
   var MONTHS = ["Yanvar","Fevral","Mart","Aprel","May","Iyun","Iyul","Avgust","Sentabr","Oktabr","Noyabr","Dekabr"];
 
@@ -771,6 +771,18 @@
       : '<div style="grid-column:1/-1;display:flex;align-items:center;justify-content:center;color:#9AA1AC;font:500 15px Sora,sans-serif">Bu holatda loyiha yoʻq</div>';
   }
 
+  // "3/6 post" — bajarilgani va rejasi birga. Faqat bajarilgan son
+  // ko'rsatilsa, uzoqdan qaraganda u ko'p yoki ozligi bilinmasdi.
+  function countPairHtml(done, target, word) {
+    return (
+      '<div style="display:flex;align-items:baseline;gap:4px">' +
+      '<div style="font:600 17px Sora,sans-serif;color:#0f172a;letter-spacing:-.01em;font-variant-numeric:tabular-nums">' +
+      done +
+      '<span style="font-weight:400;color:#9AA1AC">/' + target + '</span></div>' +
+      '<div style="font:400 13px Sora,sans-serif;color:#6B7280">' + word + '</div></div>'
+    );
+  }
+
   function projectCardHtml(p) {
     var color = STATUS_COLOR[p.status], bg = STATUS_BG[p.status];
     var borderOpacity = p.status === "debt" ? "" : "34";
@@ -794,9 +806,9 @@
         : '') +
       '<div style="flex:1"></div>' +
       '<div style="display:flex;align-items:center;gap:8px">' +
-      '<div style="display:flex;align-items:baseline;gap:4px"><div style="font:600 17px Sora,sans-serif;color:#0f172a;letter-spacing:-.01em">' + p.doneK + '</div><div style="font:400 13px Sora,sans-serif;color:#6B7280">post</div></div>' +
+      countPairHtml(p.doneK, p.k, "post") +
       '<div style="width:1px;height:14px;background:rgba(15,23,42,.16)"></div>' +
-      '<div style="display:flex;align-items:baseline;gap:4px"><div style="font:600 17px Sora,sans-serif;color:#0f172a;letter-spacing:-.01em">' + p.doneS + '</div><div style="font:400 13px Sora,sans-serif;color:#6B7280">stories</div></div>' +
+      countPairHtml(p.doneS, p.s, "stories") +
       '</div></div>' +
       '<div style="flex:1"></div>' +
       '<div style="display:flex;align-items:flex-end;gap:11px"><div style="font:600 44px/1 Sora,sans-serif;color:' + pctColor + ';letter-spacing:-.03em;font-variant-numeric:tabular-nums">' + p.donePct + '<span style="font-size:24px">%</span></div><div style="font:500 19px Sora,sans-serif;color:#4B5563;padding-bottom:5px;font-variant-numeric:tabular-nums">' + p.doneCount + '/' + p.targetCount + '</div></div>' +

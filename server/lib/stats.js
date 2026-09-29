@@ -17,9 +17,11 @@ const MONTHS_UZ = [
 
 // Loyiha holati BAJARILGAN va KUTILGAN foiz orasidagi farq bo'yicha
 // aniqlanadi (foiz punktida):
-//   0–5   → Rejada        (ko'k)
-//   5–12  → Ortda         (sariq)
-//   12+   → Jiddiy ortda  (qizil)
+//   rejadan oldinda → Oldinda       (yashil)
+//   0–5             → Rejada        (ko'k)
+//   5–12            → Ortda         (sariq)
+//   12+             → Jiddiy ortda  (qizil)
+// Reja to'liq bajarilgan loyiha alohida: Bajarildi (yashil).
 // Avval bu chegara vazifa SONI bilan solishtirilardi ("5 ta vazifa
 // orqada"), shuning uchun katta loyihalarda deyarli hammasi "Ortda"
 // bo'lib chiqardi.
@@ -142,6 +144,10 @@ function classifyProject(row, today) {
   } else if (gap > TEMPO_OK_GAP) {
     status = "behind";
     statusLabel = "Ortda";
+  } else if (gap < 0) {
+    // Rejadan o'tib ketgan — bu ham yaxshi xabar, yashil.
+    status = "ahead";
+    statusLabel = "Oldinda";
   }
 
   // Matn holatdan mustaqil — vazifa soni bo'yicha aniq xabar beradi
@@ -460,11 +466,11 @@ async function getWallStats() {
   });
 
   // Xodimlar paneli kabi — eng yaxshi natijali loyiha birinchi bo'lib
-  // chiqadi (alifbo tartibi o'rniga). Avval holat bo'yicha (Rejada >
-  // Ortda > Jiddiy ortda > Qarz), so'ng har bir holat ichida darajasi
+  // chiqadi (alifbo tartibi o'rniga). Avval holat bo'yicha (Bajarildi >
+  // Oldinda > Rejada > Ortda > Jiddiy ortda > Qarz), so'ng darajasi
   // bo'yicha (rejadan qanchalik oldinda/ortda, Qarz uchun — qancha kam
   // qolgan).
-  const STATUS_RANK = { done: 4, onTrack: 3, behind: 2, late: 1, debt: 0 };
+  const STATUS_RANK = { done: 5, ahead: 4, onTrack: 3, behind: 2, late: 1, debt: 0 };
   projects.sort((a, b) => {
     const rankDiff = STATUS_RANK[b.status] - STATUS_RANK[a.status];
     if (rankDiff !== 0) return rankDiff;
