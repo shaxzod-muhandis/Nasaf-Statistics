@@ -14,7 +14,6 @@
   a { color: #2f7ab9; text-decoration: none; }
   @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
   @keyframes tick { from { width: 0%; } to { width: 100%; } }
-  .nshop-row:not(:last-child) { border-bottom: 1px solid rgba(15,23,42,.07); }
   .feed-row { border-top: 1px solid rgba(255,255,255,.1); }
 
   /* ── Login ── */
@@ -85,8 +84,7 @@
     #projects-grid { overflow-y: visible !important; }
     #projects-panel-header { flex-wrap: wrap; row-gap: 10px; padding: 16px !important; }
     #projects-panel-header > div:nth-child(3) { flex: 1 0 100% !important; }
-    #today-feed { max-height: 320px; }
-    #nshop-list { max-height: none !important; }
+    #today-feed { max-height: 560px; }
   }
 
   /* ── Loading ── */
@@ -219,7 +217,7 @@
         <div style="display:flex;flex-direction:column;gap:22px;overflow:hidden">
 
           <div style="background:#0f172a;border-radius:20px;flex:1;display:flex;flex-direction:column;overflow:hidden">
-            <div style="height:4px;background:rgba(255,255,255,.12);flex:none;overflow:hidden"><div style="height:100%;background:#5795C6;animation:tick 6s linear infinite"></div></div>
+            <div style="height:4px;background:rgba(255,255,255,.12);flex:none;overflow:hidden"><div style="height:100%;background:#5795C6;animation:tick 30s linear infinite"></div></div>
             <div style="padding:18px 24px 14px;display:flex;align-items:center;gap:12px;flex:none">
               <div style="width:10px;height:10px;border-radius:99px;background:#4ade80;animation:pulse 2.4s ease-in-out infinite;flex:none"></div>
               <div style="font:600 19px Sora,sans-serif;color:#fff;letter-spacing:-.01em">Bugun bajarilgan ishlar</div>
@@ -240,21 +238,6 @@
             </div>
           </div>
 
-          <div style="background:#fff;border:1px solid rgba(15,23,42,.09);border-radius:20px;padding:20px 24px 16px;flex:none;display:flex;flex-direction:column;overflow:hidden">
-            <div style="display:flex;align-items:baseline;gap:12px;flex:none">
-              <div style="font:600 18px Sora,sans-serif;color:#0f172a;letter-spacing:-.01em">NShop</div>
-              <div id="nshop-total-label" style="font:400 16px Sora,sans-serif;color:#6B7280"></div>
-              <div style="flex:1"></div>
-              <div style="font:400 16px Sora,sans-serif;color:#6B7280">qoldiq</div>
-            </div>
-            <div id="nshop-list" style="flex:1;display:flex;flex-direction:column;justify-content:center;min-height:0;margin-top:4px"></div>
-            <div style="padding-top:13px;border-top:1px solid rgba(15,23,42,.08);display:flex;align-items:center;gap:9px;flex:none">
-              <div style="font:400 16px Sora,sans-serif;color:#6B7280">Bu oy almashtirildi</div>
-              <div id="nshop-month-count" style="font:600 18px Sora,sans-serif;color:#0f172a"></div>
-              <div style="flex:1"></div>
-              <div id="nshop-month-spent" style="font:600 18px Sora,sans-serif;color:#d97706"></div>
-              <div style="font:400 16px Sora,sans-serif;color:#6B7280">Ncoin</div>
-            </div>
           </div>
 
         </div>
@@ -673,36 +656,6 @@
     $("team-done").textContent = data.summary.teamDoneCount;
     $("team-target").textContent = "/" + data.summary.teamTargetCount;
     $("month-label").textContent = MONTHS[now.getUTCMonth()].toLowerCase() + "da";
-
-    renderNShop(data.nshop);
-  }
-
-  function renderNShop(nshop) {
-    if (!nshop) return;
-    $("nshop-total-label").textContent = "omborda " + nshop.totalStock + " ta";
-    $("nshop-list").innerHTML = nshop.products.length
-      ? nshop.products.map(nshopRowHtml).join("")
-      : '<div style="color:#9AA1AC;font:500 15px Sora,sans-serif;text-align:center">Mahsulot yo\'q</div>';
-    $("nshop-month-count").textContent = nshop.monthPurchaseCount + " ta";
-    $("nshop-month-spent").textContent = fmtNcoin(nshop.monthNcoinSpent);
-  }
-
-  function fmtNcoin(n) {
-    n = Number(n) || 0;
-    return (Number.isInteger(n) ? n : n.toFixed(1)).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
-  }
-
-  function nshopRowHtml(item) {
-    var barColor = item.pct < 75 ? "#d97706" : "#2f7ab9";
-    return (
-      '<div class="nshop-row" style="display:flex;align-items:center;gap:13px;padding:15px 0">' +
-      '<div style="flex:1;min-width:0"><div style="font:500 17px Sora,sans-serif;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(item.name) + '</div>' +
-      '<div style="margin-top:7px;height:7px;border-radius:99px;background:#E7EBEF;overflow:hidden"><div style="width:' + Math.max(0, Math.min(100, item.pct)) + '%;height:100%;background:' + barColor + ';border-radius:99px"></div></div></div>' +
-      '<div style="text-align:right;flex:none;width:96px">' +
-      '<div style="display:flex;align-items:baseline;gap:5px;justify-content:flex-end"><div style="font:600 21px Sora,sans-serif;color:#0f172a;letter-spacing:-.01em;font-variant-numeric:tabular-nums">' + item.stock + '</div><div style="font:400 15px Sora,sans-serif;color:#6B7280">ta qoldi</div></div>' +
-      '<div style="font:400 16px Sora,sans-serif;color:#6B7280;margin-top:3px">' + item.purchasedThisMonth + ' ta olindi</div>' +
-      '</div></div>'
-    );
   }
 
   // ── Loyihalar: holat bo'yicha filtr ──
@@ -807,12 +760,14 @@
   }
 
   // ── "Bugun bajarilgan ishlar" — avtomatik sahifalab aylantirish ──
-  // Kartaning tepasidagi ingichka chiziqcha (@keyframes tick, 6s) —
-  // vaqt o'tishini ko'rsatuvchi indikator: har 6 soniyada ro'yxatning
-  // KEYINGI sahifasi ko'rsatiladi (barchasi ekranga sig'masa). Bitta
-  // sahifaga nechta qator sig'ishi konteyner balandligidan avtomatik
-  // hisoblanadi (ekran o'lchamidan qat'i nazar to'g'ri ishlashi uchun).
-  var FEED_ROTATE_MS = 6000;
+  // Kartaning tepasidagi ingichka chiziqcha (@keyframes tick) — vaqt
+  // o'tishini ko'rsatuvchi indikator: har 30 soniyada ro'yxatning
+  // KEYINGI sahifasi ko'rsatiladi (barchasi ekranga sig'masa). Chiziqcha
+  // animatsiyasining davomiyligi shu qiymat bilan BIR XIL bo'lishi
+  // shart (markupdagi `animation:tick 30s`), aks holda ko'rsatkich
+  // almashish paytiga to'g'ri kelmaydi. Bitta sahifaga nechta qator
+  // sig'ishi konteyner balandligidan avtomatik hisoblanadi.
+  var FEED_ROTATE_MS = 30000;
   var feedItemsCache = [];
   var feedPageIndex = 0;
   var feedRotateTimer = null;

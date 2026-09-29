@@ -232,55 +232,6 @@ async function getTodayFeed(today) {
   });
 }
 
-// NShop — devor ekranida omborning joriy holati va shu oy sotilgani.
-// Faqat "qoldiq" nisbati bo'yicha eng kam qolganlar birinchi (tezkor
-// e'tibor kerak bo'lganlar), NShop admin panelidagi "E'tibor talab
-// qiladi" mantig'iga mos.
-async function getNShopStats(monthStart, monthEndExclusive) {
-  const productsR = await db.query(`
-    select id, name, stock, stock_capacity
-    from ncoin_products
-    where is_archived = false and is_visible = true and stock_capacity > 0
-    order by (stock::float / nullif(stock_capacity, 0)) asc
-    limit 6
-  `);
-  const productIds = productsR.rows.map((row) => String(row.id));
-  let purchasedByProduct = new Map();
-  if (productIds.length) {
-    const purchR = await db.query(
-      `select reference_id, count(*) as n
-       from ncoin_transactions
-       where reason = 'purchase' and reference_type = 'product'
-         and reference_id = any($1::text[])
-         and created_at >= $2::date and created_at < $3::date
-       group by reference_id`,
-      [productIds, monthStart, monthEndExclusive],
-    );
-    purchasedByProduct = new Map(purchR.rows.map((row) => [row.reference_id, Number(row.n)]));
-  }
-  const totalStockR = await db.query(
-    `select coalesce(sum(stock), 0)::int as total from ncoin_products where is_archived = false and is_visible = true`,
-  );
-  const monthR = await db.query(
-    `select count(*) as n, coalesce(-sum(amount), 0)::float as spent
-     from ncoin_transactions
-     where reason = 'purchase' and created_at >= $1::date and created_at < $2::date`,
-    [monthStart, monthEndExclusive],
-  );
-  return {
-    totalStock: Number(totalStockR.rows[0].total),
-    products: productsR.rows.map((row) => ({
-      name: row.name,
-      stock: row.stock,
-      capacity: row.stock_capacity,
-      pct: row.stock_capacity > 0 ? Math.round((row.stock / row.stock_capacity) * 100) : 0,
-      purchasedThisMonth: purchasedByProduct.get(String(row.id)) || 0,
-    })),
-    monthPurchaseCount: Number(monthR.rows[0].n),
-    monthNcoinSpent: Number(monthR.rows[0].spent),
-  };
-}
-
 // "Qarsak" bildirishnomasi uchun — `since`dan keyin bajarilgan post/
 // stories (checks) va bajarilgan deb belgilangan vazifalarni (tasks,
 // status='done') birlashtirib, vaqt bo'yicha tartiblab qaytaradi.
@@ -464,14 +415,13 @@ async function getWallStats() {
     return scoreOf(b) - scoreOf(a);
   });
 
-  const [employees, todayFeed, onTimePct, onTimePctPrevMonth, overdue, activity30d, nshop] = await Promise.all([
+  const [employees, todayFeed, onTimePct, onTimePctPrevMonth, overdue, activity30d] = await Promise.all([
     getEmployeeLeaderboard(monthStart, today, projectsById),
     getTodayFeed(today),
     getOnTimePct(monthStart, addDays(today, 1)),
     getOnTimePct(prevMonthStart, monthStart),
     getOverdueTasks(today),
     getActivity30d(today),
-    getNShopStats(monthStart, addDays(today, 1)),
   ]);
 
   const teamDoneCount = projectRows.reduce((sum, row) => sum + row.done_k + row.done_s, 0);
@@ -502,7 +452,6 @@ async function getWallStats() {
       overdueProjectCount: overdue.projectCount,
     },
     activity30d,
-    nshop,
   };
 }
 
