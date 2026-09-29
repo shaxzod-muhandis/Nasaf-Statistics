@@ -309,13 +309,20 @@ async function attachCelebrationSounds(events) {
   if (!ids.length) return events;
   try {
     const r = await db.query(
-      `select id, celebration_sound_url from users
+      `select id, celebration_sound_url, celebration_sound_start from users
        where id = any($1::uuid[]) and celebration_sound_url is not null`,
       [ids],
     );
-    const byId = new Map(r.rows.map((row) => [String(row.id), row.celebration_sound_url]));
+    const byId = new Map(
+      r.rows.map((row) => [
+        String(row.id),
+        { url: row.celebration_sound_url, start: Number(row.celebration_sound_start) || 0 },
+      ]),
+    );
     events.forEach((e) => {
-      e.soundUrl = byId.get(String(e.userId)) || null;
+      const snd = byId.get(String(e.userId));
+      e.soundUrl = snd ? snd.url : null;
+      e.soundStart = snd ? snd.start : 0;
     });
     celebrationSoundOffUntil = 0;
   } catch (e) {
