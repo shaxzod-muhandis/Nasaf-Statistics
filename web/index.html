@@ -398,8 +398,7 @@
     loginScreen.style.display = "none";
     dashboardScreen.style.display = "block";
     fitCanvas();
-    tickClock();
-    setInterval(tickClock, 1000);
+    startClock();
     loadStats();
     setInterval(loadStats, REFRESH_MS);
     initCelebrations();
@@ -612,7 +611,52 @@
   function tashkentNow() {
     return new Date(Date.now() + 5 * 3600 * 1000);
   }
+  // Soat ma'lumot yangilanishiga MUTLAQO bog'liq emas — o'z taymeri
+  // bilan yuradi. Lekin televizor brauzeri sahifani fonga olib qo'ysa
+  // yoki quvvat tejash rejimiga tushsa, `setInterval` keskin
+  // sekinlashadi yoki butunlay to'xtaydi va uyg'onganda o'z-o'zidan
+  // tiklanmaydi — o'shanda soat qotib qolib, faqat boshqa biror narsa
+  // (masalan 60 soniyalik ma'lumot yangilanishi) uni qo'zg'atardi.
+  // Shu sabab: har tikda vaqt belgilab qo'yiladi, va sahifa yana
+  // ko'rinadigan/faollashadigan har bir hodisada taymer tirikligi
+  // tekshiriladi — o'lgan bo'lsa qaytadan ishga tushiriladi.
+  var clockTimer = null;
+  var lastClockTick = 0;
+
+  var clockFrameLoopStarted = false;
+
+  function startClock() {
+    if (clockTimer) clearInterval(clockTimer);
+    tickClock();
+    clockTimer = setInterval(tickClock, 1000);
+    // Ikkinchi, taymerdan MUSTAQIL zaxira — brauzerning kadr sikli.
+    // `setInterval` throttle bo'lsa ham, ekran chizilayotgan bo'lsa bu
+    // ishlaydi; sahifa yashiringanda esa aksincha (rAF to'xtaydi,
+    // interval ishlaydi). Ikkalasi birgalikda soatning qotib
+    // qolishiga yo'l qo'ymaydi. Har kadrda faqat bitta solishtirish
+    // bajariladi — yuklama sezilarsiz.
+    if (!clockFrameLoopStarted && typeof requestAnimationFrame === "function") {
+      clockFrameLoopStarted = true;
+      (function frame() {
+        requestAnimationFrame(frame);
+        if (Date.now() - lastClockTick > 1000) tickClock();
+      })();
+    }
+  }
+
+  function reviveClock() {
+    // 5 soniyadan ko'p tik bo'lmagan bo'lsa — taymer to'xtagan, qayta quramiz
+    if (Date.now() - lastClockTick > 5000) startClock();
+    else tickClock();
+  }
+
+  document.addEventListener("visibilitychange", reviveClock);
+  window.addEventListener("pageshow", reviveClock);
+  window.addEventListener("focus", reviveClock);
+  window.addEventListener("online", reviveClock);
+
   function tickClock() {
+    lastClockTick = Date.now();
     var now = tashkentNow();
     $("clock").textContent = pad2(now.getUTCHours()) + ":" + pad2(now.getUTCMinutes());
     $("clock-date").textContent = WEEKDAYS[now.getUTCDay()] + ", " + now.getUTCDate() + "-" + MONTHS[now.getUTCMonth()].toLowerCase();
@@ -633,6 +677,9 @@
       lastUpdatedAt = Date.now();
       lastData = data;
       render(data);
+      // Zaxira: agar soat taymeri qandaydir sababga ko'ra to'xtagan
+      // bo'lsa, ma'lumot yangilanishi uni ham tiklaydi.
+      reviveClock();
       if (!firstLoadDone) {
         firstLoadDone = true;
         $("loading-overlay").style.display = "none";
