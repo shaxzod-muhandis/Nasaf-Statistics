@@ -70,6 +70,15 @@
   }
   #dashboard-canvas { width: 1920px; height: 1080px; flex: none; transform-origin: center center; }
 
+  /* Loyihalar to'ri — ustunlar HECH QACHON o'z tarkibidan kengaymaydi
+     (`minmax(0,1fr)`), aks holda uzun nom yoki katta sonlar to'rni
+     gorizontal toshirib yuborardi. Ustunlar soni ekran eniga qarab
+     kamayadi; sig'magan kartochkalar aylantirish o'rniga sahifalab
+     ko'rsatiladi (startProjectRotation). */
+  #projects-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  @media (max-width: 1400px) { #projects-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 880px)  { #projects-grid { grid-template-columns: minmax(0, 1fr); } }
+
   @media (max-width: 880px) {
     #dashboard-viewport { overflow-y: auto; align-items: flex-start; }
     #dashboard-canvas {
@@ -81,7 +90,8 @@
     #dash-body { padding: 16px !important; overflow: visible !important; }
     #dash-main-grid { grid-template-columns: 1fr !important; overflow: visible !important; }
     #dash-main-grid > div { min-height: 320px; }
-    #projects-grid { overflow-y: visible !important; }
+    #projects-grid { overflow: visible !important; grid-auto-rows: auto !important; }
+    #projects-page-label { display: none !important; }
     #projects-panel-header { flex-wrap: wrap; row-gap: 10px; padding: 16px !important; }
     #projects-panel-header > div:nth-child(3) { flex: 1 0 100% !important; }
     #today-feed { max-height: 560px; }
@@ -223,10 +233,11 @@
           <div id="projects-panel-header" style="padding:20px 26px;border-bottom:1px solid rgba(15,23,42,.08);display:flex;align-items:center;gap:20px;flex:none">
             <div style="font:600 21px Sora,sans-serif;color:#0f172a;letter-spacing:-.02em">Loyihalar</div>
             <div id="projects-count-label" style="font:400 16px Sora,sans-serif;color:#9AA1AC"></div>
+            <div id="projects-page-label" style="font:500 15px Sora,sans-serif;color:#9AA1AC;display:none"></div>
             <div style="flex:1"></div>
             <div id="project-status-filter" style="display:flex;align-items:center;gap:8px"></div>
           </div>
-          <div id="projects-grid" style="flex:1;display:grid;grid-template-columns:1fr 1fr 1fr;grid-auto-rows:1fr;gap:16px;padding:18px;overflow-y:auto"></div>
+          <div id="projects-grid" style="flex:1;display:grid;grid-auto-rows:minmax(210px, 1fr);gap:16px;padding:18px;overflow:hidden;min-width:0"></div>
         </div>
 
         <div style="display:flex;flex-direction:column;gap:22px;overflow:hidden">
@@ -757,18 +768,83 @@
     });
   }
 
+  // Loyihalar to'ri — aylantirish YO'Q. Hammasi sig'sa bir sahifada
+  // turadi; sig'masa, "Bugun bajarilgan ishlar" kabi har 30 soniyada
+  // keyingi sahifaga o'tadi. Devor ekraniga hech kim qo'l tekkizmaydi,
+  // shuning uchun aylantirish paneli u yerda foydasiz — kesilgan
+  // kartochka esa umuman ko'rinmay qolardi.
+  var PROJECT_ROTATE_MS = 30000;
+  var projectItemsCache = [];
+  var projectPageIndex = 0;
+  var projectPageSize = 0;
+  var projectRotateTimer = null;
+
   function renderProjects(projects) {
     var filtered = projectStatusFilter === "all" ? projects : projects.filter(function (p) { return p.status === projectStatusFilter; });
     $("projects-count-label").textContent = projects.length + " faol · tempo bo'yicha";
-    // Ustunlar soni loyihalar soniga qarab moslashadi (dizayn 6 taga
-    // mo'ljallangan edi, lekin bu sonlar vaqt o'tishi bilan o'zgaradi —
-    // qattiq 3 ustun qolsa, 6 tadan ko'p loyiha pastki qatorda kesilib
-    // qolardi).
-    var projectCols = isMobileLayout() ? 1 : filtered.length > 6 ? 4 : 3;
-    $("projects-grid").style.gridTemplateColumns = "repeat(" + Math.max(1, Math.min(projectCols, filtered.length)) + ", 1fr)";
-    $("projects-grid").innerHTML = filtered.length
-      ? filtered.map(projectCardHtml).join("")
-      : '<div style="grid-column:1/-1;display:flex;align-items:center;justify-content:center;color:#9AA1AC;font:500 15px Sora,sans-serif">Bu holatda loyiha yoʻq</div>';
+    projectItemsCache = filtered;
+    projectPageIndex = 0;
+    startProjectRotation();
+  }
+
+  // Ustunlar soni ekran eniga ham, loyihalar soniga ham qarab tanlanadi.
+  // `minmax(0,1fr)` — ustun o'z tarkibidan kengaymasligi uchun MAJBURIY
+  // (oddiy `1fr` da uzun nom to'rni gorizontal toshirib yuborardi).
+  function applyProjectColumns(count) {
+    var cols = isMobileLayout() ? 1 : innerWidth <= 1400 ? 2 : count > 6 ? 4 : 3;
+    cols = Math.max(1, Math.min(cols, count || 1));
+    $("projects-grid").style.gridTemplateColumns = "repeat(" + cols + ", minmax(0, 1fr))";
+  }
+
+  // Bir sahifaga nechta kartochka sig'ishini o'lchab topadi: hammasini
+  // chizib, toshgan bo'lsa bittadan kamaytirib boradi. Kartochka
+  // balandligi tarkibga (nom necha qatorga tushishiga) bog'liq bo'lgani
+  // uchun formula bilan hisoblab bo'lmaydi.
+  function measureProjectPageSize(list) {
+    var g = $("projects-grid");
+    if (!list.length) return 0;
+    if (isMobileLayout()) return list.length; // mobilda oddiy aylantirish
+    var n = list.length;
+    while (n > 1) {
+      g.innerHTML = list.slice(0, n).map(projectCardHtml).join("");
+      if (g.scrollHeight <= g.clientHeight + 1) break;
+      n--;
+    }
+    return n;
+  }
+
+  function startProjectRotation() {
+    if (projectRotateTimer) { clearInterval(projectRotateTimer); projectRotateTimer = null; }
+    var list = projectItemsCache;
+    applyProjectColumns(list.length);
+    projectPageSize = measureProjectPageSize(list);
+    renderProjectsPage();
+    if (projectPageSize > 0 && list.length > projectPageSize) {
+      projectRotateTimer = setInterval(function () {
+        projectPageIndex++;
+        renderProjectsPage();
+      }, PROJECT_ROTATE_MS);
+    }
+  }
+
+  function renderProjectsPage() {
+    var g = $("projects-grid");
+    var list = projectItemsCache;
+    var lbl = $("projects-page-label");
+    if (!list.length) {
+      g.innerHTML = '<div style="grid-column:1/-1;display:flex;align-items:center;justify-content:center;color:#9AA1AC;font:500 15px Sora,sans-serif">Bu holatda loyiha yoʻq</div>';
+      if (lbl) lbl.style.display = "none";
+      return;
+    }
+    var size = projectPageSize || list.length;
+    var totalPages = Math.max(1, Math.ceil(list.length / size));
+    projectPageIndex = ((projectPageIndex % totalPages) + totalPages) % totalPages;
+    var start = projectPageIndex * size;
+    g.innerHTML = list.slice(start, start + size).map(projectCardHtml).join("");
+    if (lbl) {
+      lbl.style.display = totalPages > 1 ? "" : "none";
+      lbl.textContent = totalPages > 1 ? projectPageIndex + 1 + " / " + totalPages : "";
+    }
   }
 
   // "3/6 post" — bajarilgani va rejasi birga. Faqat bajarilgan son
@@ -793,19 +869,19 @@
     var exp = p.expectedPct;
     var expShift = exp == null ? "" : exp > 88 ? "translateX(-100%)" : exp < 12 ? "translateX(0)" : "translateX(-50%)";
     return (
-      '<div style="border:' + border + ';background:' + bg + ';border-radius:16px;padding:18px 19px;display:flex;flex-direction:column">' +
+      '<div style="border:' + border + ';background:' + bg + ';border-radius:16px;padding:18px 19px;display:flex;flex-direction:column;min-width:0;overflow:hidden">' +
       '<div style="display:flex;align-items:center;gap:10px">' +
       '<div style="height:26px;padding:0 10px;border-radius:7px;background:' + color + ';color:' + ink + ';font:600 14px Sora,sans-serif;display:flex;align-items:center">' + esc(p.statusLabel) + '</div>' +
       '<div style="flex:1"></div>' +
       '<div style="font:500 17px Sora,sans-serif;color:' + (p.status === "debt" ? color : "#4B5563") + '">' + esc(p.daysLabel) + '</div>' +
       '</div>' +
-      '<div style="font:600 27px Sora,sans-serif;color:#0f172a;letter-spacing:-.025em;margin-top:13px">' + esc(p.label) + '</div>' +
+      '<div style="font:600 27px Sora,sans-serif;color:#0f172a;letter-spacing:-.025em;margin-top:13px;min-width:0;overflow-wrap:anywhere">' + esc(p.label) + '</div>' +
       '<div style="display:flex;align-items:center;gap:9px;margin-top:9px">' +
       (p.contributor
-        ? '<div style="width:28px;height:28px;border-radius:9px;background:#EDEFF2;display:flex;align-items:center;justify-content:center;font:600 12px Sora,sans-serif;color:#0f172a;flex:none">' + esc(p.contributor.slice(0, 1)) + '</div><div style="font:400 17px Sora,sans-serif;color:#4B5563">' + esc(p.contributor) + '</div>'
+        ? '<div style="width:28px;height:28px;border-radius:9px;background:#EDEFF2;display:flex;align-items:center;justify-content:center;font:600 12px Sora,sans-serif;color:#0f172a;flex:none">' + esc(p.contributor.slice(0, 1)) + '</div><div style="font:400 17px Sora,sans-serif;color:#4B5563;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(p.contributor) + '</div>'
         : '') +
-      '<div style="flex:1"></div>' +
-      '<div style="display:flex;align-items:center;gap:8px">' +
+      '<div style="flex:1;min-width:8px"></div>' +
+      '<div style="display:flex;align-items:center;gap:8px;flex:none">' +
       countPairHtml(p.doneK, p.k, "post") +
       '<div style="width:1px;height:14px;background:rgba(15,23,42,.16)"></div>' +
       countPairHtml(p.doneS, p.s, "stories") +
