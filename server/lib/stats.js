@@ -320,10 +320,13 @@ async function getCelebrations(since) {
 // Tracker loyihasidagi 0016 migratsiyasida qo'shiladi, u hali
 // qo'llanmagan bo'lsa ham devor ekranidagi tabriklar ishlashda davom
 // etishi kerak — o'shanda hamma uchun standart qarsaklar qoladi.
-let celebrationSoundSupported = true;
+// Ustun topilmasa so'rov VAQTINCHA o'chiriladi, butunlay emas —
+// Tracker'da migratsiya qo'llangach devor ekrani o'zi tiklanishi kerak.
+const CELEBRATION_SOUND_RETRY_MS = 5 * 60 * 1000;
+let celebrationSoundOffUntil = 0;
 
 async function attachCelebrationSounds(events) {
-  if (!celebrationSoundSupported || !events.length) return events;
+  if (Date.now() < celebrationSoundOffUntil || !events.length) return events;
   const ids = [...new Set(events.map((e) => e.userId).filter(Boolean))];
   if (!ids.length) return events;
   try {
@@ -336,9 +339,10 @@ async function attachCelebrationSounds(events) {
     events.forEach((e) => {
       e.soundUrl = byId.get(String(e.userId)) || null;
     });
+    celebrationSoundOffUntil = 0;
   } catch (e) {
     if (e.code === "42703") {
-      celebrationSoundSupported = false;
+      celebrationSoundOffUntil = Date.now() + CELEBRATION_SOUND_RETRY_MS;
       console.warn("celebration_sound_url ustuni yo'q — standart qarsaklar ishlatiladi");
     } else {
       console.error("Tabrik ovozlarini o'qishda xatolik:", e.message);
