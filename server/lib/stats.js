@@ -241,7 +241,7 @@ async function getTodayFeed(today) {
 async function getCelebrations(since) {
   const [checksR, tasksR, coinR] = await Promise.all([
     db.query(
-      `select c.type, c.seq_number, c.done_at as at, p.label as project_label,
+      `select c.type, c.seq_number, c.done_at as at, p.label as project_label, u.id as user_id,
               coalesce(nullif(trim(concat(u.first_name, ' ', u.last_name)), ''), u.username) as user_name
        from checks c
        join project_cycles pc on pc.id = c.cycle_id
@@ -253,7 +253,7 @@ async function getCelebrations(since) {
       [since],
     ),
     db.query(
-      `select t.title, t.completed_at as at,
+      `select t.title, t.completed_at as at, u.id as user_id,
               coalesce(nullif(trim(concat(u.first_name, ' ', u.last_name)), ''), u.username) as user_name
        from tasks t
        join users u on u.id = t.assignee_user_id
@@ -266,7 +266,7 @@ async function getCelebrations(since) {
     // (mukofot) tabriklashga loyiq; ayirish (manfiy tuzatish) hech
     // qachon bu ro'yxatga tushmaydi.
     db.query(
-      `select t.amount, t.created_at as at,
+      `select t.amount, t.created_at as at, u.id as user_id,
               coalesce(nullif(trim(concat(u.first_name, ' ', u.last_name)), ''), u.username) as user_name
        from ncoin_transactions t
        join users u on u.id = t.user_id
@@ -281,6 +281,7 @@ async function getCelebrations(since) {
     .filter((row) => row.user_name)
     .map((row) => ({
       name: row.user_name,
+      userId: row.user_id,
       kind: row.type === "k" ? "post" : "stories",
       label: `${row.type === "k" ? "Post" : "Stories"} #${row.seq_number}`,
       detail: row.project_label,
@@ -290,6 +291,7 @@ async function getCelebrations(since) {
     .filter((row) => row.user_name)
     .map((row) => ({
       name: row.user_name,
+      userId: row.user_id,
       kind: "task",
       label: "Vazifa",
       detail: row.title,
@@ -299,13 +301,50 @@ async function getCelebrations(since) {
     .filter((row) => row.user_name)
     .map((row) => ({
       name: row.user_name,
+      userId: row.user_id,
       kind: "coin",
       label: "Ncoin",
       detail: `+${Number(row.amount)} Ncoin`,
       at: row.at,
     }));
 
-  return [...checkEvents, ...taskEvents, ...coinEvents].sort((a, b) => new Date(a.at) - new Date(b.at));
+  const events = [...checkEvents, ...taskEvents, ...coinEvents].sort(
+    (a, b) => new Date(a.at) - new Date(b.at),
+  );
+  await attachCelebrationSounds(events);
+  return events;
+}
+
+// Har bir xodimning o'z "tabrik ovozi" (Profil bo'limidan yuklangan
+// qisqa audio). Ataylab ALOHIDA va HIMOYALANGAN so'rov: ustun asosiy
+// Tracker loyihasidagi 0016 migratsiyasida qo'shiladi, u hali
+// qo'llanmagan bo'lsa ham devor ekranidagi tabriklar ishlashda davom
+// etishi kerak — o'shanda hamma uchun standart qarsaklar qoladi.
+let celebrationSoundSupported = true;
+
+async function attachCelebrationSounds(events) {
+  if (!celebrationSoundSupported || !events.length) return events;
+  const ids = [...new Set(events.map((e) => e.userId).filter(Boolean))];
+  if (!ids.length) return events;
+  try {
+    const r = await db.query(
+      `select id, celebration_sound_url from users
+       where id = any($1::uuid[]) and celebration_sound_url is not null`,
+      [ids],
+    );
+    const byId = new Map(r.rows.map((row) => [String(row.id), row.celebration_sound_url]));
+    events.forEach((e) => {
+      e.soundUrl = byId.get(String(e.userId)) || null;
+    });
+  } catch (e) {
+    if (e.code === "42703") {
+      celebrationSoundSupported = false;
+      console.warn("celebration_sound_url ustuni yo'q — standart qarsaklar ishlatiladi");
+    } else {
+      console.error("Tabrik ovozlarini o'qishda xatolik:", e.message);
+    }
+  }
+  return events;
 }
 
 async function getOnTimePct(rangeStart, rangeEnd) {

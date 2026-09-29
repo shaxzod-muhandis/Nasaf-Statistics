@@ -969,6 +969,49 @@
     } catch (e) { /* ovoz muvaffaqiyatsiz bo'lsa ham vizual tabrik davom etadi */ }
   }
 
+  // ── Xodimning shaxsiy tabrik ovozi ──
+  // Har bir xodim Profil bo'limidan o'z qisqa ovozini qo'yishi mumkin.
+  // Qo'ymagan bo'lsa (yoki fayl ijro etilmasa) — standart qarsaklar.
+  // Bir nechta tabrik birga ko'rsatilganda ham qarsaklar ishlatiladi:
+  // bir vaqtda bir necha xil ovoz ijro etish quloqqa yoqimsiz.
+  var CELEBRATE_SOUND_MAX_MS = 5000;
+  var celebrateAudio = null;
+  var celebrateAudioStopTimer = null;
+  var celebrateSoundCache = {};
+
+  // Hodisa kelishi bilan fayl oldindan yuklab qo'yiladi — aks holda
+  // tabrik chiqqanda ovoz tarmoqni kutib, kechikib boshlanardi.
+  function preloadCelebrationSound(url) {
+    if (!url || celebrateSoundCache[url]) return;
+    try {
+      var a = new Audio();
+      a.preload = "auto";
+      a.src = url;
+      celebrateSoundCache[url] = a;
+    } catch (e) { /* e'tiborsiz */ }
+  }
+
+  function playCelebrationSound(url) {
+    if (!url) return playApplause();
+    try {
+      if (celebrateAudioStopTimer) clearTimeout(celebrateAudioStopTimer);
+      if (celebrateAudio) { try { celebrateAudio.pause(); } catch (e) {} }
+      celebrateAudio = celebrateSoundCache[url] || new Audio(url);
+      celebrateSoundCache[url] = celebrateAudio;
+      celebrateAudio.currentTime = 0;
+      var played = celebrateAudio.play();
+      if (played && typeof played.catch === "function") {
+        played.catch(function () { playApplause(); });
+      }
+      // Uzunroq fayl yuklangan bo'lsa ham faqat birinchi 5 soniyasi
+      celebrateAudioStopTimer = setTimeout(function () {
+        try { celebrateAudio.pause(); } catch (e) {}
+      }, CELEBRATE_SOUND_MAX_MS);
+    } catch (e) {
+      playApplause();
+    }
+  }
+
   var CONFETTI_COLORS = ["#2f7ab9", "#16a34a", "#d97706", "#dc2626", "#5795C6", "#facc15"];
   function spawnConfetti() {
     var host = $("celebrate-confetti");
@@ -1026,11 +1069,11 @@
     return byName;
   }
 
-  function showCelebrateCard(showMs) {
+  function showCelebrateCard(showMs, soundUrl) {
     var card = $("celebrate-card");
     card.classList.remove("leaving");
     spawnConfetti();
-    playApplause();
+    playCelebrationSound(soundUrl);
     $("celebrate-overlay").classList.add("show");
     setTimeout(function () {
       card.classList.add("leaving");
@@ -1060,7 +1103,7 @@
       $("celebrate-detail").textContent = view.detail;
       $("celebrate-single").style.display = "";
       $("celebrate-batch").style.display = "none";
-      showCelebrateCard(CELEBRATE_SHOW_MS);
+      showCelebrateCard(CELEBRATE_SHOW_MS, batch[0].soundUrl);
       return;
     }
 
@@ -1085,7 +1128,9 @@
       (rest > 0 ? '<div class="celebrate-more">+ yana ' + rest + " ta xodim</div>" : "");
     $("celebrate-single").style.display = "none";
     $("celebrate-batch").style.display = "";
-    showCelebrateCard(CELEBRATE_BATCH_SHOW_MS);
+    // Umumiy kartada — standart qarsaklar (bir nechta shaxsiy ovozni
+    // birga ijro etib bo'lmaydi).
+    showCelebrateCard(CELEBRATE_BATCH_SHOW_MS, null);
   }
 
   async function pollCelebrations() {
@@ -1094,7 +1139,10 @@
       if (!res.ok) return;
       var data = await res.json();
       celebrateSince = data.now || new Date().toISOString();
-      (data.events || []).forEach(function (ev) { celebrateQueue.push(ev); });
+      (data.events || []).forEach(function (ev) {
+        preloadCelebrationSound(ev.soundUrl);
+        celebrateQueue.push(ev);
+      });
       processCelebrateQueue();
     } catch (e) {
       console.error("Celebrations so'rovida xatolik:", e);
