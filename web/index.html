@@ -148,6 +148,21 @@
   }
   .celebrate-name { font: 700 30px Sora, sans-serif; color: #0f172a; letter-spacing: -.02em; margin-top: 18px; }
   .celebrate-detail { font: 500 18px Sora, sans-serif; color: #6B7280; margin-top: 8px; }
+  /* Bir nechta tabrik yig'ilib qolganda (masalan TV uyqudan uyg'onganda)
+     ular ketma-ket emas, BITTA umumiy kartada ko'rsatiladi. */
+  .celebrate-title { font: 700 30px Sora, sans-serif; color: #0f172a; letter-spacing: -.02em; margin-top: 16px; }
+  .celebrate-sub { font: 500 18px Sora, sans-serif; color: #6B7280; margin-top: 8px; }
+  #celebrate-list { margin-top: 24px; display: flex; flex-direction: column; gap: 14px; }
+  .celebrate-row { display: flex; align-items: center; gap: 14px; text-align: left; }
+  .celebrate-row-av {
+    width: 48px; height: 48px; border-radius: 15px; flex: none;
+    background: linear-gradient(135deg,#2f7ab9,#5795C6); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font: 700 19px Sora, sans-serif;
+  }
+  .celebrate-row-name { font: 600 21px Sora, sans-serif; color: #0f172a; letter-spacing: -.01em; }
+  .celebrate-row-detail { font: 400 16px Sora, sans-serif; color: #6B7280; margin-top: 2px; }
+  .celebrate-more { font: 500 16px Sora, sans-serif; color: #9AA1AC; margin-top: 2px; }
 </style>
 </head>
 <body>
@@ -252,9 +267,16 @@
   <div id="celebrate-confetti"></div>
   <div class="celebrate-card" id="celebrate-card">
     <div class="celebrate-emoji">🎉</div>
-    <div class="celebrate-avatar" id="celebrate-avatar"></div>
-    <div class="celebrate-name" id="celebrate-name"></div>
-    <div class="celebrate-detail" id="celebrate-detail"></div>
+    <div id="celebrate-single">
+      <div class="celebrate-avatar" id="celebrate-avatar"></div>
+      <div class="celebrate-name" id="celebrate-name"></div>
+      <div class="celebrate-detail" id="celebrate-detail"></div>
+    </div>
+    <div id="celebrate-batch" style="display:none">
+      <div class="celebrate-title" id="celebrate-batch-title"></div>
+      <div class="celebrate-sub" id="celebrate-batch-sub"></div>
+      <div id="celebrate-list"></div>
+    </div>
   </div>
 </div>
 
@@ -971,14 +993,40 @@
   }
   function initialsOf(name) { return (name || "?").trim().slice(0, 1).toUpperCase(); }
 
-  function processCelebrateQueue() {
-    if (celebrateShowing || celebrateQueue.length === 0) return;
-    celebrateShowing = true;
-    var ev = celebrateQueue.shift();
-    var view = celebrateHtml(ev);
-    $("celebrate-avatar").textContent = view.avatar;
-    $("celebrate-name").textContent = view.name;
-    $("celebrate-detail").textContent = view.detail;
+  // Navbatda bittadan ko'p hodisa bo'lsa — ular KETMA-KET emas, bitta
+  // umumiy kartada ko'rsatiladi. Sabab: TV uyqudan uyg'onganda yoki
+  // sahifa uzoq vaqt fonda turganda bir necha hodisa birdan keladi va
+  // avval har biri alohida 5 soniyadan chiqib, ekranni uzoq band
+  // qilardi. Bir xil xodimning bir nechta ishi ham bitta qatorga
+  // yig'iladi ("2 ta post · 1 ta stories").
+  var CELEBRATE_BATCH_SHOW_MS = 9000;
+  var CELEBRATE_BATCH_MAX_ROWS = 6;
+  var CELEBRATE_KIND_SHORT = { post: "post", stories: "stories", task: "vazifa", coin: "mukofot" };
+
+  function groupCelebrations(events) {
+    var byName = [];
+    var index = {};
+    events.forEach(function (ev) {
+      var name = ev.name || "—";
+      if (index[name] === undefined) {
+        index[name] = byName.length;
+        byName.push({ name: name, total: 0, kinds: {}, order: [] });
+      }
+      var row = byName[index[name]];
+      row.total++;
+      var k = CELEBRATE_KIND_SHORT[ev.kind] || "ish";
+      if (!row.kinds[k]) { row.kinds[k] = 0; row.order.push(k); }
+      row.kinds[k]++;
+    });
+    byName.forEach(function (row) {
+      row.detail = row.order
+        .map(function (k) { return row.kinds[k] + " ta " + k; })
+        .join(" · ");
+    });
+    return byName;
+  }
+
+  function showCelebrateCard(showMs) {
     var card = $("celebrate-card");
     card.classList.remove("leaving");
     spawnConfetti();
@@ -992,7 +1040,52 @@
         celebrateShowing = false;
         processCelebrateQueue();
       }, 350);
-    }, CELEBRATE_SHOW_MS);
+    }, showMs);
+  }
+
+  function processCelebrateQueue() {
+    if (celebrateShowing || celebrateQueue.length === 0) return;
+    celebrateShowing = true;
+
+    // Navbatdagi HAMMASI birdan olinadi — ko'rsatilayotgan paytda
+    // kelganlari keyingi kartaga tushadi.
+    var batch = celebrateQueue.splice(0, celebrateQueue.length);
+    var rows = groupCelebrations(batch);
+
+    // Bitta xodimning bitta ishi bo'lsa — avvalgidek shaxsiy tabrik.
+    if (rows.length === 1 && batch.length === 1) {
+      var view = celebrateHtml(batch[0]);
+      $("celebrate-avatar").textContent = view.avatar;
+      $("celebrate-name").textContent = view.name;
+      $("celebrate-detail").textContent = view.detail;
+      $("celebrate-single").style.display = "";
+      $("celebrate-batch").style.display = "none";
+      showCelebrateCard(CELEBRATE_SHOW_MS);
+      return;
+    }
+
+    var shown = rows.slice(0, CELEBRATE_BATCH_MAX_ROWS);
+    var rest = rows.length - shown.length;
+    $("celebrate-batch-title").textContent = batch.length + " ta yangi natija";
+    $("celebrate-batch-sub").textContent =
+      rows.length === 1 ? "Barakalla!" : rows.length + " ta xodim";
+    $("celebrate-list").innerHTML =
+      shown
+        .map(function (r) {
+          return (
+            '<div class="celebrate-row">' +
+            '<div class="celebrate-row-av">' + esc(initialsOf(r.name)) + "</div>" +
+            '<div style="flex:1;min-width:0">' +
+            '<div class="celebrate-row-name">' + esc(r.name) + "</div>" +
+            '<div class="celebrate-row-detail">' + esc(r.detail) + "</div>" +
+            "</div></div>"
+          );
+        })
+        .join("") +
+      (rest > 0 ? '<div class="celebrate-more">+ yana ' + rest + " ta xodim</div>" : "");
+    $("celebrate-single").style.display = "none";
+    $("celebrate-batch").style.display = "";
+    showCelebrateCard(CELEBRATE_BATCH_SHOW_MS);
   }
 
   async function pollCelebrations() {
