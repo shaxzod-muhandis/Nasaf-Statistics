@@ -1095,17 +1095,36 @@
     try {
       if (celebrateAudioStopTimer) clearTimeout(celebrateAudioStopTimer);
       if (celebrateAudio) { try { celebrateAudio.pause(); } catch (e) {} }
-      celebrateAudio = celebrateSoundCache[url] || new Audio(url);
-      celebrateSoundCache[url] = celebrateAudio;
-      try { celebrateAudio.currentTime = Number(startSec) || 0; } catch (e) { /* metadata hali yo'q */ }
-      var played = celebrateAudio.play();
-      if (played && typeof played.catch === "function") {
-        played.catch(function () { playApplause(); });
+      var a = celebrateSoundCache[url] || new Audio(url);
+      celebrateSoundCache[url] = a;
+      celebrateAudio = a;
+      var start = Number(startSec) || 0;
+      var started = false;
+
+      // `currentTime` ni METADATA yuklanmasdan oldin o'rnatib bo'lmaydi
+      // (brauzer xato beradi) — avval shunday qilingandi va natijada
+      // ovoz tanlangan nuqtadan emas, fayl boshidan ijro etilardi.
+      var begin = function () {
+        if (started) return;
+        started = true;
+        try { if (start > 0) a.currentTime = start; } catch (e) {}
+        var played = a.play();
+        if (played && typeof played.catch === "function") {
+          played.catch(function () { playApplause(); });
+        }
+        celebrateAudioStopTimer = setTimeout(function () {
+          try { a.pause(); } catch (e) {}
+        }, CELEBRATE_SOUND_MAX_MS);
+      };
+
+      if (a.readyState >= 1) begin();
+      else {
+        a.addEventListener("loadedmetadata", begin, { once: true });
+        // Fayl umuman yuklanmasa tabrik jimjit o'tib ketmasin
+        setTimeout(function () {
+          if (!started) { started = true; playApplause(); }
+        }, 1500);
       }
-      // Tanlangan nuqtadan aynan 10 soniya
-      celebrateAudioStopTimer = setTimeout(function () {
-        try { celebrateAudio.pause(); } catch (e) {}
-      }, CELEBRATE_SOUND_MAX_MS);
     } catch (e) {
       playApplause();
     }
@@ -1227,9 +1246,20 @@
       (rest > 0 ? '<div class="celebrate-more">+ yana ' + rest + " ta xodim</div>" : "");
     $("celebrate-single").style.display = "none";
     $("celebrate-batch").style.display = "";
-    // Umumiy kartada — standart qarsaklar (bir nechta shaxsiy ovozni
-    // birga ijro etib bo'lmaydi).
-    showCelebrateCard(CELEBRATE_BATCH_SHOW_MS, null, 0);
+    // Bir vaqtda bir necha xil ovozni ijro etib bo'lmaydi, shuning uchun
+    // umumiy kartada BIRINCHI shaxsiy ovoz ishlatiladi; hech kimda
+    // bo'lmasa — qarsaklar. (Avval umumiy kartada doim qarsaklar
+    // chalinardi, natijada o'z qo'shig'ini qo'ygan xodim uni deyarli
+    // hech qachon eshitmasdi: hodisalar ko'pincha to'p-to'p keladi.)
+    var withSound = null;
+    for (var bi = 0; bi < batch.length; bi++) {
+      if (batch[bi].soundUrl) { withSound = batch[bi]; break; }
+    }
+    showCelebrateCard(
+      CELEBRATE_BATCH_SHOW_MS,
+      withSound ? withSound.soundUrl : null,
+      withSound ? withSound.soundStart : 0,
+    );
   }
 
   async function pollCelebrations() {
