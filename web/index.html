@@ -724,6 +724,12 @@
 
   function render(data) {
     $("cycle-label").textContent = data.cycleLabel || "";
+    // Xodimlarning tabrik ovozlarini oldindan yuklab qo'yamiz — tabrik
+    // chiqqanda fayl allaqachon tayyor bo'lsin (aks holda birinchi
+    // marta qarsaklarga tushib qolardi). audioCtx hali ochilmagan
+    // bo'lsa jimgina o'tkazib yuboriladi va keyingi yangilanishda
+    // qayta urinib ko'riladi.
+    (data.celebrationSounds || []).forEach(preloadCelebrationSound);
 
     renderProjectStatusFilter(data.projects);
     renderProjects(data.projects);
@@ -995,7 +1001,12 @@
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     } catch (e) { /* brauzer qo'llamasa — ovozsiz davom etadi */ }
   }
-  document.addEventListener("click", unlockAudio, { once: true });
+  // Faqat `click` emas — televizor pultida bosish `keydown` yoki
+  // `pointerdown` bo'lib kelishi mumkin. Qaysi biri birinchi kelsa,
+  // audio o'shanda ochiladi.
+  ["click", "pointerdown", "touchstart", "keydown"].forEach(function (evName) {
+    document.addEventListener(evName, unlockAudio, { once: true });
+  });
 
   // Qarsak ovozini haqiqiy audio fayl ulamasdan, Web Audio API orqali
   // "sintez" qiladi — bir nechta qisqa oq-shovqin portlashlari orqali
@@ -1066,65 +1077,108 @@
   }
 
   // ── Xodimning shaxsiy tabrik ovozi ──
-  // Har bir xodim Profil bo'limidan o'z qisqa ovozini qo'yishi mumkin.
-  // Qo'ymagan bo'lsa (yoki fayl ijro etilmasa) — standart qarsaklar.
-  // Bir nechta tabrik birga ko'rsatilganda ham qarsaklar ishlatiladi:
-  // bir vaqtda bir necha xil ovoz ijro etish quloqqa yoqimsiz.
+  // Har bir xodim Profil bo'limidan to'liq qo'shiq yuklab, uning
+  // ichidan 10 soniyalik parchani tanlaydi. Qo'ymagan bo'lsa (yoki
+  // fayl chalinmasa) — standart qarsaklar.
+  //
+  // DIQQAT: ovoz `<audio>` elementi bilan EMAS, aynan qarsaklar
+  // ishlatadigan Web Audio (audioCtx) orqali chalinadi. Sabab:
+  // televizor brauzeri sahifa yuklangandan keyin hech kim ekranga
+  // tegmagani uchun `<audio>.play()` ni "avtomatik ijro" deb bloklaydi
+  // va tabrik doim qarsakka tushib qolardi. audioCtx esa bir marta
+  // (kirishdagi bosishda) ochilgach ishlab turaveradi — qarsaklar
+  // shu sabab eshitilardi. Qo'shimcha foyda: parcha boshlanishi va
+  // uzunligi aniq beriladi, metadata kutish shart emas.
   var CELEBRATE_SOUND_MAX_MS = 10000;
-  var celebrateAudio = null;
-  var celebrateAudioStopTimer = null;
-  var celebrateSoundCache = {};
+  var CELEBRATE_SOUND_FADE = 0.35;
+  var celebrateBuffers = {};
+  var celebratePending = {};
+  var celebrateSource = null;
 
-  // Hodisa kelishi bilan fayl oldindan yuklab qo'yiladi — aks holda
-  // tabrik chiqqanda ovoz tarmoqni kutib, kechikib boshlanardi.
-  function preloadCelebrationSound(url) {
-    if (!url || celebrateSoundCache[url]) return;
-    try {
-      var a = new Audio();
-      a.preload = "auto";
-      a.src = url;
-      celebrateSoundCache[url] = a;
-    } catch (e) { /* e'tiborsiz */ }
+  function decodeAudioCompat(arrayBuffer) {
+    return new Promise(function (resolve, reject) {
+      // Eski brauzerlarda decodeAudioData promise qaytarmaydi
+      var maybe = audioCtx.decodeAudioData(arrayBuffer, resolve, reject);
+      if (maybe && typeof maybe.then === "function") maybe.then(resolve, reject);
+    });
   }
 
-  // `startSec` — xodim Profil bo'limida o'zi tanlagan parchaning
-  // boshlanish nuqtasi. Fayl to'liq qo'shiq bo'lishi mumkin, shu
-  // nuqtadan boshlab aynan 10 soniya ijro etiladi.
+  function loadCelebrationBuffer(url) {
+    if (celebrateBuffers[url]) return Promise.resolve(celebrateBuffers[url]);
+    if (celebratePending[url]) return celebratePending[url];
+    var pr = fetch(url)
+      .then(function (r) {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.arrayBuffer();
+      })
+      .then(decodeAudioCompat)
+      .then(function (buf) {
+        celebrateBuffers[url] = buf;
+        delete celebratePending[url];
+        return buf;
+      })
+      .catch(function (e) {
+        delete celebratePending[url];
+        throw e;
+      });
+    celebratePending[url] = pr;
+    return pr;
+  }
+
+  // Hodisa kelishi bilan fayl yuklab, dekodlab qo'yiladi — tabrik
+  // chiqqanda ovoz kechikmasdan boshlanadi.
+  function preloadCelebrationSound(url) {
+    if (!url || !audioCtx) return;
+    loadCelebrationBuffer(url).catch(function () {});
+  }
+
+  function stopCelebrationSound() {
+    if (!celebrateSource) return;
+    try { celebrateSource.stop(); } catch (e) {}
+    celebrateSource = null;
+  }
+
+  function playCelebrationBuffer(buf, startSec) {
+    stopCelebrationSound();
+    var start = Math.max(0, Math.min(Number(startSec) || 0, Math.max(0, buf.duration - 0.2)));
+    var dur = Math.min(CELEBRATE_SOUND_MAX_MS / 1000, Math.max(0.2, buf.duration - start));
+    var src = audioCtx.createBufferSource();
+    src.buffer = buf;
+    var gain = audioCtx.createGain();
+    var t0 = audioCtx.currentTime;
+    // Oxirida keskin uzilib qolmasligi uchun yumshoq so'nish
+    gain.gain.setValueAtTime(1, t0);
+    gain.gain.setValueAtTime(1, t0 + Math.max(0, dur - CELEBRATE_SOUND_FADE));
+    gain.gain.linearRampToValueAtTime(0, t0 + dur);
+    src.connect(gain).connect(audioCtx.destination);
+    src.start(t0, start, dur);
+    celebrateSource = src;
+  }
+
   function playCelebrationSound(url, startSec) {
-    if (!url) return playApplause();
+    if (!url || !audioCtx) return playApplause();
     try {
-      if (celebrateAudioStopTimer) clearTimeout(celebrateAudioStopTimer);
-      if (celebrateAudio) { try { celebrateAudio.pause(); } catch (e) {} }
-      var a = celebrateSoundCache[url] || new Audio(url);
-      celebrateSoundCache[url] = a;
-      celebrateAudio = a;
-      var start = Number(startSec) || 0;
-      var started = false;
-
-      // `currentTime` ni METADATA yuklanmasdan oldin o'rnatib bo'lmaydi
-      // (brauzer xato beradi) — avval shunday qilingandi va natijada
-      // ovoz tanlangan nuqtadan emas, fayl boshidan ijro etilardi.
-      var begin = function () {
-        if (started) return;
-        started = true;
-        try { if (start > 0) a.currentTime = start; } catch (e) {}
-        var played = a.play();
-        if (played && typeof played.catch === "function") {
-          played.catch(function () { playApplause(); });
-        }
-        celebrateAudioStopTimer = setTimeout(function () {
-          try { a.pause(); } catch (e) {}
-        }, CELEBRATE_SOUND_MAX_MS);
-      };
-
-      if (a.readyState >= 1) begin();
-      else {
-        a.addEventListener("loadedmetadata", begin, { once: true });
-        // Fayl umuman yuklanmasa tabrik jimjit o'tib ketmasin
-        setTimeout(function () {
-          if (!started) { started = true; playApplause(); }
-        }, 1500);
-      }
+      if (audioCtx.state === "suspended") audioCtx.resume();
+      var cached = celebrateBuffers[url];
+      if (cached) return playCelebrationBuffer(cached, startSec);
+      // Hali yuklanmagan bo'lsa kutamiz, lekin tabrik jimjit o'tib
+      // ketmasligi uchun 1.2 soniyadan keyin qarsaklarga qaytamiz.
+      var done = false;
+      var fallback = setTimeout(function () {
+        if (!done) { done = true; playApplause(); }
+      }, 1200);
+      loadCelebrationBuffer(url)
+        .then(function (buf) {
+          clearTimeout(fallback);
+          if (done) return;
+          done = true;
+          playCelebrationBuffer(buf, startSec);
+        })
+        .catch(function (e) {
+          clearTimeout(fallback);
+          console.error("Tabrik ovozini chalib bo'lmadi:", e.message);
+          if (!done) { done = true; playApplause(); }
+        });
     } catch (e) {
       playApplause();
     }

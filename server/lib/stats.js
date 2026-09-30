@@ -303,6 +303,24 @@ async function getCelebrations(since) {
 const CELEBRATION_SOUND_RETRY_MS = 5 * 60 * 1000;
 let celebrationSoundOffUntil = 0;
 
+// Barcha xodimlarning ovoz manzillari — devor ekrani ularni OLDINDAN
+// yuklab, dekodlab qo'yishi uchun (stats har 60 soniyada keladi).
+// Aks holda tabrik chiqqan zahoti fayl hali yuklanmagan bo'lib,
+// ovoz qarsaklarga tushib qolardi.
+async function getCelebrationSoundUrls() {
+  if (Date.now() < celebrationSoundOffUntil) return [];
+  try {
+    const r = await db.query(
+      `select distinct celebration_sound_url from users
+       where is_active = true and celebration_sound_url is not null`,
+    );
+    return r.rows.map((row) => row.celebration_sound_url);
+  } catch (e) {
+    if (e.code === "42703") celebrationSoundOffUntil = Date.now() + CELEBRATION_SOUND_RETRY_MS;
+    return [];
+  }
+}
+
 async function attachCelebrationSounds(events) {
   if (Date.now() < celebrationSoundOffUntil || !events.length) return events;
   const ids = [...new Set(events.map((e) => e.userId).filter(Boolean))];
@@ -442,14 +460,16 @@ async function getWallStats() {
     return scoreOf(b) - scoreOf(a);
   });
 
-  const [employees, todayFeed, onTimePct, onTimePctPrevMonth, overdue, activity30d] = await Promise.all([
-    getEmployeeLeaderboard(monthStart, today, projectsById),
-    getTodayFeed(today),
-    getOnTimePct(monthStart, addDays(today, 1)),
-    getOnTimePct(prevMonthStart, monthStart),
-    getOverdueTasks(today),
-    getActivity30d(today),
-  ]);
+  const [employees, todayFeed, onTimePct, onTimePctPrevMonth, overdue, activity30d, celebrationSounds] =
+    await Promise.all([
+      getEmployeeLeaderboard(monthStart, today, projectsById),
+      getTodayFeed(today),
+      getOnTimePct(monthStart, addDays(today, 1)),
+      getOnTimePct(prevMonthStart, monthStart),
+      getOverdueTasks(today),
+      getActivity30d(today),
+      getCelebrationSoundUrls(),
+    ]);
 
   const teamDoneCount = projectRows.reduce((sum, row) => sum + row.done_k + row.done_s, 0);
   const teamTargetCount = projectRows.reduce((sum, row) => sum + row.posts_target + row.stories_target, 0);
@@ -466,6 +486,7 @@ async function getWallStats() {
     projects,
     employees,
     todayFeed,
+    celebrationSounds,
     summary: {
       teamDoneCount,
       teamTargetCount,
