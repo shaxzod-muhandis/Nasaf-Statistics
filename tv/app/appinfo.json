@@ -1,0 +1,12 @@
+{
+  "id": "uz.nasafdigital.wallscreen",
+  "version": "1.0.0",
+  "vendor": "Nasaf Digital",
+  "type": "web",
+  "main": "index.html",
+  "title": "Nasaf Devor ekrani",
+  "icon": "icon.png",
+  "largeIcon": "largeIcon.png",
+  "bgColor": "#0e1726",
+  "resolution": "1920x1080"
+}

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8">
+  <title>Nasaf Devor ekrani</title>
+  <style>
+    html, body {
+      margin: 0; height: 100%;
+      background: #0e1726; color: #9aa1ac;
+      font: 28px/1.4 sans-serif;
+      display: flex; align-items: center; justify-content: center;
+      text-align: center;
+    }
+    b { color: #fff; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div id="m"><b>Nasaf Digital</b><br>Yuklanmoqda…</div>
+  <script>
+    // Ilovaning o'zida hech narsa yo'q: u devor ekrani saytini to'liq
+    // ekranda ochadi. Barcha mantiq saytda, shuning uchun saytni
+    // yangilash televizorga qayta o'rnatishni talab qilmaydi.
+    var MANZIL = "https://nasaf-wall-screen.vercel.app/";
+    var m = document.getElementById("m");
+
+    // Televizor yoqilganda Wi-Fi ilovadan keyin ulanadi. To'g'ridan-to'g'ri
+    // o'tsak, webOS xato sahifasini ko'rsatib, shu yerda qotib qolardi —
+    // devor ekrani esa odamsiz turadi, uni hech kim qayta ochmaydi.
+    // Shuning uchun avval sayt javob berishini kutamiz.
+    function urin() {
+      fetch(MANZIL, { mode: "no-cors", cache: "no-store" })
+        .then(function () { location.replace(MANZIL); })
+        .catch(function () {
+          m.innerHTML = "<b>Nasaf Digital</b><br>Internetga ulanish kutilmoqda…";
+          setTimeout(urin, 5000);
+        });
+    }
+    urin();
+  </script>
+</body>
+</html>
