@@ -28,16 +28,13 @@ const MONTHS_UZ = [
 const TEMPO_OK_GAP = 5;
 const TEMPO_WARN_GAP = 12;
 
-// Asosiy loyihadagi notify.js#projectPct bilan bir xil — Post 70%,
-// Stories 30% og'irlikda (faqat bittasi bo'lsa, o'sha 100%).
+// Botdagi "📊 Loyihalar holati" bilan bir xil: bajarilgan post+stories
+// JAMI maqsadga nisbatan. Avval Post 70% / Stories 30% og'irlik bilan
+// hisoblanardi — ekranda "93%" yonida "24/25" turardi va bot bilan
+// farq qilardi (2026-11-06 fikr-mulohaza: botdagisi to'g'ri).
 function projectPct(doneK, k, doneS, s) {
-  const hasK = k > 0;
-  const hasS = s > 0;
-  if (!hasK && !hasS) return 0;
-  const kFrac = hasK ? doneK / k : 0;
-  const sFrac = hasS ? doneS / s : 0;
-  if (hasK && hasS) return Math.round((kFrac * 0.7 + sFrac * 0.3) * 100);
-  return Math.round((hasK ? kFrac : sFrac) * 100);
+  const jami = k + s;
+  return jami > 0 ? Math.round(((doneK + doneS) / jami) * 100) : 0;
 }
 
 function initials(name) {
