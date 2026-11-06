@@ -15,18 +15,26 @@ const MONTHS_UZ = [
   "Iyul", "Avgust", "Sentabr", "Oktabr", "Noyabr", "Dekabr",
 ];
 
-// Loyiha holati BAJARILGAN va KUTILGAN foiz orasidagi farq bo'yicha
-// aniqlanadi (foiz punktida):
-//   rejadan oldinda → Oldinda       (yashil)
-//   0–5             → Rejada        (ko'k)
-//   5–12            → Ortda         (sariq)
-//   12+             → Jiddiy ortda  (qizil)
-// Reja to'liq bajarilgan loyiha alohida: Bajarildi (yashil).
-// Avval bu chegara vazifa SONI bilan solishtirilardi ("5 ta vazifa
-// orqada"), shuning uchun katta loyihalarda deyarli hammasi "Ortda"
-// bo'lib chiqardi.
-const TEMPO_OK_GAP = 5;
-const TEMPO_WARN_GAP = 12;
+// Loyiha holati — asosiy Tracker panelidagi projStatus() bilan AYNAN bir
+// xil (2026-11-06: TV va panel bir loyihani ikki xil ko'rsatardi):
+//   bajarilgan ≥ reja            → Rejada    (ko'k)
+//   rejadan past, lekin ≥ 50%    → O'rtacha  (sariq)
+//   rejadan past va 50% dan kam  → Ortda     (qizil)
+// Reja to'liq bajarilgan loyiha — Bajarildi, muddati o'tgan — Qarz.
+const PROJ_MID_MIN_PCT = 50;
+
+// Kutilgan foiz HAFTALIK bosqichlar bilan (panelning projElapsedFrac()
+// bilan bir xil): har tugagan hafta +25%, tugamagan hafta hisobga
+// olinmaydi. Avval kunlik chiziq edi — 6-noyabrda reja 20% bo'lib,
+// endigina boshlangan loyihalar "Jiddiy ortda" ko'rinardi, panelda
+// esa o'sha loyihalar "Rejada" edi.
+const EXPECTED_WEEK_STEPS = 4;
+function expectedPctOf(row, today) {
+  const total = dayDiff(row.period_start, row.period_end) + 1;
+  if (total <= 0) return 0;
+  const elapsed = Math.min(total, Math.max(0, dayDiff(row.period_start, today) + 1));
+  return Math.round(Math.min(1, Math.floor(elapsed / 7) / EXPECTED_WEEK_STEPS) * 100);
+}
 
 // Botdagi "📊 Loyihalar holati" bilan bir xil: bajarilgan post+stories
 // JAMI maqsadga nisbatan. Avval Post 70% / Stories 30% og'irlik bilan
@@ -95,25 +103,17 @@ function classifyProject(row, today) {
     };
   }
 
-  const daysElapsed = dayDiff(row.period_start, today) + 1;
-  const totalDays = dayDiff(row.period_start, row.period_end) + 1;
-  const expectedPct = Math.round(Math.min(100, Math.max(0, (daysElapsed / totalDays) * 100)));
-  // Rangni AYNAN ekranda ko'rinadigan raqamlar belgilaydi (ikkalasi ham
-  // yaxlitlangan) — shunda ko'rsatkich bilan rang hech qachon
-  // qarama-qarshi tushmaydi.
-  const gap = expectedPct - donePct;
+  const expectedPct = expectedPctOf(row, today);
   let status = "onTrack";
   let statusLabel = "Rejada";
-  if (gap > TEMPO_WARN_GAP) {
-    status = "late";
-    statusLabel = "Jiddiy ortda";
-  } else if (gap > TEMPO_OK_GAP) {
-    status = "behind";
-    statusLabel = "Ortda";
-  } else if (gap < 0) {
-    // Rejadan o'tib ketgan — bu ham yaxshi xabar, yashil.
-    status = "ahead";
-    statusLabel = "Oldinda";
+  if (donePct < expectedPct) {
+    if (donePct >= PROJ_MID_MIN_PCT) {
+      status = "behind";
+      statusLabel = "O'rtacha";
+    } else {
+      status = "late";
+      statusLabel = "Ortda";
+    }
   }
 
   return {
@@ -443,10 +443,10 @@ async function getWallStats() {
 
   // Xodimlar paneli kabi — eng yaxshi natijali loyiha birinchi bo'lib
   // chiqadi (alifbo tartibi o'rniga). Avval holat bo'yicha (Bajarildi >
-  // Oldinda > Rejada > Ortda > Jiddiy ortda > Qarz), so'ng darajasi
+  // Rejada > O'rtacha > Ortda > Qarz), so'ng darajasi
   // bo'yicha (rejadan qanchalik oldinda/ortda, Qarz uchun — qancha kam
   // qolgan).
-  const STATUS_RANK = { done: 5, ahead: 4, onTrack: 3, behind: 2, late: 1, debt: 0 };
+  const STATUS_RANK = { done: 5, onTrack: 3, behind: 2, late: 1, debt: 0 };
   projects.sort((a, b) => {
     const rankDiff = STATUS_RANK[b.status] - STATUS_RANK[a.status];
     if (rankDiff !== 0) return rankDiff;
