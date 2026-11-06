@@ -15,13 +15,16 @@ const MONTHS_UZ = [
   "Iyul", "Avgust", "Sentabr", "Oktabr", "Noyabr", "Dekabr",
 ];
 
-// Loyiha holati — asosiy Tracker panelidagi projStatus() bilan AYNAN bir
-// xil (2026-11-06: TV va panel bir loyihani ikki xil ko'rsatardi):
-//   bajarilgan ≥ reja            → Rejada    (ko'k)
-//   rejadan past, lekin ≥ 50%    → O'rtacha  (sariq)
-//   rejadan past va 50% dan kam  → Ortda     (qizil)
+// Loyiha holati — bajarilgan foiz "Reja" chizig'iga nisbatan (foiz
+// punktida, farq = bajarilgan − reja):
+//   chiziqdan o'tib ketgan (> +2)  → Oldinda       (yashil)
+//   chiziqning o'zida (±2)         → Rejada        (ko'k)
+//   ortda (−3 … −12)               → Ortda         (sariq)
+//   ancha ortda (−12 dan ko'p)     → Jiddiy ortda  (qizil)
 // Reja to'liq bajarilgan loyiha — Bajarildi, muddati o'tgan — Qarz.
-const PROJ_MID_MIN_PCT = 50;
+// ±2 — yaxlitlash shovqini: 49% bilan 50% "chiziqda" deb olinadi.
+const REJA_TOLERANCE = 2;
+const JIDDIY_ORTDA_GAP = 12;
 
 // Kutilgan foiz HAFTALIK bosqichlar bilan (panelning projElapsedFrac()
 // bilan bir xil): har tugagan hafta +25%, tugamagan hafta hisobga
@@ -104,16 +107,18 @@ function classifyProject(row, today) {
   }
 
   const expectedPct = expectedPctOf(row, today);
+  const farq = donePct - expectedPct;
   let status = "onTrack";
   let statusLabel = "Rejada";
-  if (donePct < expectedPct) {
-    if (donePct >= PROJ_MID_MIN_PCT) {
-      status = "behind";
-      statusLabel = "O'rtacha";
-    } else {
-      status = "late";
-      statusLabel = "Ortda";
-    }
+  if (farq > REJA_TOLERANCE) {
+    status = "ahead";
+    statusLabel = "Oldinda";
+  } else if (farq < -JIDDIY_ORTDA_GAP) {
+    status = "late";
+    statusLabel = "Jiddiy ortda";
+  } else if (farq < -REJA_TOLERANCE) {
+    status = "behind";
+    statusLabel = "Ortda";
   }
 
   return {
@@ -443,10 +448,10 @@ async function getWallStats() {
 
   // Xodimlar paneli kabi — eng yaxshi natijali loyiha birinchi bo'lib
   // chiqadi (alifbo tartibi o'rniga). Avval holat bo'yicha (Bajarildi >
-  // Rejada > O'rtacha > Ortda > Qarz), so'ng darajasi
+  // Oldinda > Rejada > Ortda > Jiddiy ortda > Qarz), so'ng darajasi
   // bo'yicha (rejadan qanchalik oldinda/ortda, Qarz uchun — qancha kam
   // qolgan).
-  const STATUS_RANK = { done: 5, onTrack: 3, behind: 2, late: 1, debt: 0 };
+  const STATUS_RANK = { done: 5, ahead: 4, onTrack: 3, behind: 2, late: 1, debt: 0 };
   projects.sort((a, b) => {
     const rankDiff = STATUS_RANK[b.status] - STATUS_RANK[a.status];
     if (rankDiff !== 0) return rankDiff;
