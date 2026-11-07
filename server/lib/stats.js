@@ -26,17 +26,13 @@ const MONTHS_UZ = [
 const REJA_TOLERANCE = 2;
 const JIDDIY_ORTDA_GAP = 12;
 
-// Kutilgan foiz HAFTALIK bosqichlar bilan (panelning projElapsedFrac()
-// bilan bir xil): har tugagan hafta +25%, tugamagan hafta hisobga
-// olinmaydi. Avval kunlik chiziq edi — 6-noyabrda reja 20% bo'lib,
-// endigina boshlangan loyihalar "Jiddiy ortda" ko'rinardi, panelda
-// esa o'sha loyihalar "Rejada" edi.
-const EXPECTED_WEEK_STEPS = 4;
+// Kutilgan foiz (reja chizig'i) KUNLIK: davrning necha kuni o'tganiga
+// teng, har kuni suriladi — panel va bot bilan bir xil.
 function expectedPctOf(row, today) {
   const total = dayDiff(row.period_start, row.period_end) + 1;
   if (total <= 0) return 0;
   const elapsed = Math.min(total, Math.max(0, dayDiff(row.period_start, today) + 1));
-  return Math.round(Math.min(1, Math.floor(elapsed / 7) / EXPECTED_WEEK_STEPS) * 100);
+  return Math.round((elapsed / total) * 100);
 }
 
 // Botdagi "📊 Loyihalar holati" bilan bir xil: bajarilgan post+stories
