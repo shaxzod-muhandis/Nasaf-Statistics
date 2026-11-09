@@ -739,9 +739,19 @@
     $("today-count-badge").textContent = data.summary.todayDoneCount;
     $("today-post-count").textContent = data.summary.todayPostCount;
     $("today-stories-count").textContent = data.summary.todayStoriesCount;
-    $("team-done").textContent = data.summary.teamDoneCount;
-    $("team-target").textContent = "/" + data.summary.teamTargetCount;
-    $("month-label").textContent = MONTHS[now.getUTCMonth()].toLowerCase() + "da";
+    // Jamoa natijasi — ball bo'yicha foiz (stats.js → teamPct), loyiha
+    // foizlari bilan bir xil qoida. Avval "73/230 noyabrda" edi: oddiy
+    // son ballga mos kelmasdi, unga esa qarzdagi o'tgan oy davrlari ham
+    // kirib, "noyabrda" yozuvi noto'g'ri edi (2026-11-10).
+    if (data.summary.teamPct != null) {
+      $("team-done").textContent = data.summary.teamPct + "%";
+      $("team-target").textContent = "";
+      $("month-label").textContent = "jamoa jami";
+    } else {
+      $("team-done").textContent = data.summary.teamDoneCount;
+      $("team-target").textContent = "/" + data.summary.teamTargetCount;
+      $("month-label").textContent = MONTHS[now.getUTCMonth()].toLowerCase() + "da";
+    }
   }
 
   // ── Loyihalar: holat bo'yicha filtr ──
@@ -879,14 +889,49 @@
     );
   }
 
+  // Post va stories ALOHIDA chiziq bilan ko'rsatiladi (2026-11-10).
+  // Umumiy foiz (ball bo'yicha, 1 post = 4 stories — stats.js) yirik
+  // raqamda qoladi, lekin u ikki turni bitta songa qo'shadi: postlar
+  // rejadan oldinda, stories esa deyarli yo'q bo'lsa ham karta bitta
+  // raqam ko'rsatardi. Endi qaysi tur ortda qolgani bir qarashda
+  // ko'rinadi. Chiziq rangi — tur rangi (Tracker'dagi post ko'k /
+  // stories binafsha), holat rangi esa nishon va ramkada qoladi. Reja
+  // belgisi ikkala chiziqni kesib o'tadi: davrning o'tgan qismi ikkala
+  // tur uchun bir xil.
+  var TYPE_BAR = { post: "#2f7ab9", stories: "#7c3aed" };
+  var TYPE_INK = { post: "#255f91", stories: "#6d28d9" };
+
+  function typeRowLabelHtml(word, kind) {
+    return '<div style="height:20px;display:flex;align-items:center;font:500 16px Sora,sans-serif;color:' + TYPE_INK[kind] + '">' + word + '</div>';
+  }
+
+  function typeRowCountHtml(done, target) {
+    return (
+      '<div style="height:20px;display:flex;align-items:center;justify-content:flex-end;font:600 17px Sora,sans-serif;color:#0f172a;font-variant-numeric:tabular-nums;white-space:nowrap">' +
+      done + '<span style="font-weight:400;color:#9AA1AC">/' + target + '</span></div>'
+    );
+  }
+
+  function typeBarHtml(done, target, kind, track) {
+    var pct = target > 0 ? Math.min(100, Math.round((done / target) * 100)) : 0;
+    return (
+      '<div style="height:20px;display:flex;align-items:center">' +
+      '<div style="flex:1;height:10px;border-radius:99px;background:' + track + ';position:relative;overflow:hidden">' +
+      '<div style="position:absolute;left:0;top:0;bottom:0;width:' + pct + '%;background:' + TYPE_BAR[kind] + ';border-radius:99px"></div>' +
+      '</div></div>'
+    );
+  }
+
   function projectCardHtml(p) {
     var color = STATUS_COLOR[p.status], bg = STATUS_BG[p.status];
     var borderOpacity = p.status === "debt" ? "" : "34";
     var border = p.status === "debt" ? "1.5px solid " + color : "1px solid " + color + borderOpacity;
     var pctColor = p.status === "debt" || p.status === "done" ? color : "#0f172a";
     var ink = STATUS_INK[p.status] || "#fff";
+    var track = p.status === "debt" ? "#F3DDDD" : "#E7EBEF";
     // Kutilgan joy yorlig'i chekkaga chiqib ketmasligi uchun
     var exp = p.expectedPct;
+    var showExp = p.status !== "debt" && exp != null;
     var expShift = exp == null ? "" : exp > 88 ? "translateX(-100%)" : exp < 12 ? "translateX(0)" : "translateX(-50%)";
     return (
       '<div style="border:' + border + ';background:' + bg + ';border-radius:16px;padding:18px 19px;display:flex;flex-direction:column;min-width:0;overflow:hidden">' +
@@ -896,24 +941,28 @@
       '<div style="font:500 17px Sora,sans-serif;color:' + (p.status === "debt" ? color : "#4B5563") + '">' + esc(p.daysLabel) + '</div>' +
       '</div>' +
       '<div style="font:600 27px Sora,sans-serif;color:#0f172a;letter-spacing:-.025em;margin-top:13px;min-width:0;overflow-wrap:anywhere">' + esc(p.label) + '</div>' +
-      '<div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap">' +
-      countPairHtml(p.doneK, p.k, "post") +
-      '<div style="width:1px;height:14px;background:rgba(15,23,42,.16)"></div>' +
-      countPairHtml(p.doneS, p.s, "stories") +
-      '</div>' +
       '<div style="flex:1"></div>' +
-      '<div style="display:flex;align-items:flex-end;gap:11px"><div style="font:600 44px/1 Sora,sans-serif;color:' + pctColor + ';letter-spacing:-.03em;font-variant-numeric:tabular-nums">' + p.donePct + '<span style="font-size:24px">%</span></div><div style="font:500 19px Sora,sans-serif;color:#4B5563;padding-bottom:5px;font-variant-numeric:tabular-nums">' + p.doneCount + '/' + p.targetCount + '</div></div>' +
-      // Chiziq o'rami — ko'rsatkich va uning tepasidagi "Reja NN%"
-      // yorlig'i chiziqdan tashqarida turadi (chiziqning o'zida
-      // `overflow:hidden` bor, aks holda ular qirqilib ketardi).
-      '<div style="margin-top:26px;margin-bottom:2px;position:relative">' +
-      (p.status !== "debt" && exp != null
-        ? '<div style="position:absolute;left:' + exp + '%;transform:' + expShift + ';top:-19px;font:600 13px Sora,sans-serif;color:#6B7280;white-space:nowrap;font-variant-numeric:tabular-nums">Reja ' + exp + '%</div>'
-        : "") +
-      '<div style="height:11px;border-radius:99px;background:' + (p.status === "debt" ? "#F3DDDD" : "#E7EBEF") + ';position:relative;overflow:hidden">' +
-      '<div style="position:absolute;left:0;top:0;bottom:0;width:' + Math.min(100, p.donePct) + '%;background:' + color + ';border-radius:99px"></div>' +
+      // Foiz yonida umumiy son ("5/30") yo'q: foiz ball bo'yicha (1 post =
+      // 4 stories), oddiy son unga mos kelmaydi. Sonlar pastdagi ikki
+      // qatorda, har tur alohida (2026-11-10).
+      '<div style="margin-top:10px;font:600 44px/1 Sora,sans-serif;color:' + pctColor + ';letter-spacing:-.03em;font-variant-numeric:tabular-nums">' + p.donePct + '<span style="font-size:24px">%</span></div>' +
+      // Ikki qator: chapda tur nomi, o'rtada chiziq, o'ngda "bajarildi/reja".
+      // Chiziqlar ustuni `position:relative` — reja belgisi va uning
+      // yorlig'i shu ustunga nisbatan joylashadi va ikkala chiziqni kesadi.
+      '<div style="display:flex;gap:12px;margin-top:' + (showExp ? 30 : 16) + 'px">' +
+      '<div style="display:flex;flex-direction:column;gap:8px;flex:none">' +
+      typeRowLabelHtml("Post", "post") + typeRowLabelHtml("Stories", "stories") +
       '</div>' +
-      (p.status !== "debt" && exp != null ? '<div style="position:absolute;left:' + exp + '%;top:-4px;bottom:-4px;width:3px;background:#0f172a;border-radius:2px"></div>' : "") +
+      '<div style="flex:1;min-width:0;position:relative;display:flex;flex-direction:column;gap:8px">' +
+      (showExp
+        ? '<div style="position:absolute;left:' + exp + '%;transform:' + expShift + ';top:-21px;font:600 13px Sora,sans-serif;color:#6B7280;white-space:nowrap;font-variant-numeric:tabular-nums">Reja ' + exp + '%</div>'
+        : "") +
+      typeBarHtml(p.doneK, p.k, "post", track) + typeBarHtml(p.doneS, p.s, "stories", track) +
+      (showExp ? '<div style="position:absolute;left:' + exp + '%;top:1px;bottom:1px;width:3px;margin-left:-1px;background:#0f172a;border-radius:2px"></div>' : "") +
+      '</div>' +
+      '<div style="display:flex;flex-direction:column;gap:8px;flex:none;min-width:52px">' +
+      typeRowCountHtml(p.doneK, p.k) + typeRowCountHtml(p.doneS, p.s) +
+      '</div>' +
       '</div>' +
       '</div>'
     );

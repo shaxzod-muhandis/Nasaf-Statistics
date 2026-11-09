@@ -39,9 +39,16 @@ function expectedPctOf(row, today) {
 // JAMI maqsadga nisbatan. Avval Post 70% / Stories 30% og'irlik bilan
 // hisoblanardi — ekranda "93%" yonida "24/25" turardi va bot bilan
 // farq qilardi (2026-11-06 fikr-mulohaza: botdagisi to'g'ri).
+//
+// 2026-11-10: ish HAJMI bo'yicha — 1 post = 4 stories (ball). Teng
+// sanalganda stories ko'p bo'lgani uchun foizni o'zi tortardi (Voha:
+// post 4/10, stories 1/20 → 17%). Ncoin'ga aloqasi yo'q. Tracker
+// paneli (projPct, PROJ_POST_VAZNI) va boti (lib/notify.js → projectPct)
+// bilan AYNAN bir xil — birini o'zgartirsangiz, uchalasini.
+const POST_VAZNI = 4;
 function projectPct(doneK, k, doneS, s) {
-  const jami = k + s;
-  return jami > 0 ? Math.round(((doneK + doneS) / jami) * 100) : 0;
+  const jami = POST_VAZNI * k + s;
+  return jami > 0 ? Math.round(((POST_VAZNI * doneK + doneS) / jami) * 100) : 0;
 }
 
 function initials(name) {
@@ -471,6 +478,15 @@ async function getWallStats() {
 
   const teamDoneCount = projectRows.reduce((sum, row) => sum + row.done_k + row.done_s, 0);
   const teamTargetCount = projectRows.reduce((sum, row) => sum + row.posts_target + row.stories_target, 0);
+  // Jamoa foizi ham loyiha foizi kabi BALL bo'yicha (2026-11-10): ekran
+  // pastida "73/230" o'rniga shu ko'rsatiladi, chunki oddiy son ball
+  // bo'yicha hisoblangan loyiha foizlariga mos kelmaydi.
+  const teamPct = projectPct(
+    projectRows.reduce((sum, row) => sum + row.done_k, 0),
+    projectRows.reduce((sum, row) => sum + row.posts_target, 0),
+    projectRows.reduce((sum, row) => sum + row.done_s, 0),
+    projectRows.reduce((sum, row) => sum + row.stories_target, 0),
+  );
 
   // Oy nomi/yil ham "bugun" (Tashkent) satridan olinadi — server qaysi
   // UTC vaqtda ishlashidan qat'i nazar bir xil bo'lishi uchun (masalan
@@ -488,6 +504,7 @@ async function getWallStats() {
     summary: {
       teamDoneCount,
       teamTargetCount,
+      teamPct,
       onTimePct,
       onTimePctPrevMonth,
       todayDoneCount: todayFeed.length,
