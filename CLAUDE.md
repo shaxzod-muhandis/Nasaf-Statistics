@@ -60,7 +60,10 @@ o'qing.
    (`private/app.html`), bot (`netlify/functions/api.js`) va shu repodagi
    `stats.js` bir xil hisoblaydi. Birida o'zgartirsangiz — uchalasida.
    Qoida va kalitlar jadvali: Tracker `CLAUDE.md` → "Uch joyda bir xil".
-   - foiz = (bajarilgan post + stories) / (reja post + stories);
+   - foiz — ball bo'yicha, 1 post = 4 stories (`POST_VAZNI`, 2026-11-10):
+     (4 × bajarilgan post + bajarilgan stories) / (4 × reja post + reja stories).
+     Jamoa foizi (`teamPct`) ham shunday. Kartada foiz yonida umumiy son
+     yo'q — post va stories alohida chiziqlarda;
    - reja = kunlik (`expectedPctOf`);
    - holat: `REJA_TOLERANCE = 2`, `JIDDIY_ORTDA_GAP = 12`
      (`classifyProject`). TV kalitlari: `done`, `ahead`, `onTrack`,
