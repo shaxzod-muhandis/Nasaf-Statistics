@@ -151,7 +151,7 @@
   @keyframes celebrate-out { to { transform: scale(.9) translateY(-14px); opacity: 0; } }
   .celebrate-emoji { font-size: 52px; line-height: 1; }
   .celebrate-avatar {
-    width: 84px; height: 84px; border-radius: 99px; margin: 14px auto 0;
+    width: 84px; height: 84px; border-radius: 99px; margin: 14px auto 0; overflow: hidden;
     background: linear-gradient(135deg,#2f7ab9,#5795C6); color: #fff;
     display: flex; align-items: center; justify-content: center;
     font: 700 32px Sora, sans-serif; letter-spacing: -.02em;
@@ -165,7 +165,7 @@
   #celebrate-list { margin-top: 24px; display: flex; flex-direction: column; gap: 14px; }
   .celebrate-row { display: flex; align-items: center; gap: 14px; text-align: left; }
   .celebrate-row-av {
-    width: 48px; height: 48px; border-radius: 15px; flex: none;
+    width: 48px; height: 48px; border-radius: 15px; flex: none; overflow: hidden;
     background: linear-gradient(135deg,#2f7ab9,#5795C6); color: #fff;
     display: flex; align-items: center; justify-content: center;
     font: 700 19px Sora, sans-serif;
@@ -972,8 +972,8 @@
     var title = f.label + (f.detail ? " · " + f.detail : "");
     return (
       '<div class="feed-row" style="flex:0 0 auto;padding:14px 0;display:flex;align-items:center;gap:14px">' +
-      '<div style="width:42px;height:42px;border-radius:13px;background:rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;font:600 16px Sora,sans-serif;color:#fff;flex:none">' + esc(f.avatar) + '</div>' +
-      '<div style="flex:1;min-width:0"><div style="font:600 19px Sora,sans-serif;color:#fff;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(title) + '</div><div style="font:400 16px Sora,sans-serif;color:rgba(255,255,255,.66);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(f.name) + ' · ' + esc(f.projectLabel) + '</div></div>' +
+      '<div class="feed-av" style="width:42px;height:42px;border-radius:13px;background:rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;font:600 16px Sora,sans-serif;color:#fff;flex:none;overflow:hidden">' + avatarInner(f.avatarUrl, f.avatar) + '</div>' +
+      '<div style="flex:1;min-width:0"><div style="font:600 19px Sora,sans-serif;color:#fff;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + (f.kind === "task" ? '<span style="color:#86efac">✓ </span>' : "") + esc(title) + '</div><div style="font:400 16px Sora,sans-serif;color:rgba(255,255,255,.66);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(f.name) + (f.projectLabel ? ' · ' + esc(f.projectLabel) : "") + '</div></div>' +
       '<div style="font:500 16px Sora,sans-serif;color:rgba(255,255,255,.7);flex:none;font-variant-numeric:tabular-nums">' + esc(f.time) + '</div>' +
       '</div>'
     );
@@ -1256,6 +1256,15 @@
     };
   }
   function initialsOf(name) { return (name || "?").trim().slice(0, 1).toUpperCase(); }
+  // Xodimning profil rasmi (Tracker → Profil). Rasm yo'q yoki
+  // yuklanmasa — bosh harf (standart holat) qoladi.
+  function avatarInner(url, letter) {
+    var harf = esc(letter || "?");
+    if (!url) return harf;
+    var u = String(url).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; });
+    return '<img src="' + u + '" alt="" style="width:100%;height:100%;object-fit:cover;display:block" ' +
+      'onerror="this.parentNode.textContent=this.getAttribute(\'data-l\')" data-l="' + harf + '">';
+  }
 
   // Navbatda bittadan ko'p hodisa bo'lsa — ular KETMA-KET emas, bitta
   // umumiy kartada ko'rsatiladi. Sabab: TV uyqudan uyg'onganda yoki
@@ -1274,7 +1283,7 @@
       var name = ev.name || "—";
       if (index[name] === undefined) {
         index[name] = byName.length;
-        byName.push({ name: name, total: 0, kinds: {}, order: [] });
+        byName.push({ name: name, avatarUrl: ev.avatarUrl || null, total: 0, kinds: {}, order: [] });
       }
       var row = byName[index[name]];
       row.total++;
@@ -1319,7 +1328,7 @@
     // Bitta xodimning bitta ishi bo'lsa — avvalgidek shaxsiy tabrik.
     if (rows.length === 1 && batch.length === 1) {
       var view = celebrateHtml(batch[0]);
-      $("celebrate-avatar").textContent = view.avatar;
+      $("celebrate-avatar").innerHTML = avatarInner(batch[0].avatarUrl, view.avatar);
       $("celebrate-name").textContent = view.name;
       $("celebrate-detail").textContent = view.detail;
       $("celebrate-single").style.display = "";
@@ -1338,7 +1347,7 @@
         .map(function (r) {
           return (
             '<div class="celebrate-row">' +
-            '<div class="celebrate-row-av">' + esc(initialsOf(r.name)) + "</div>" +
+            '<div class="celebrate-row-av">' + avatarInner(r.avatarUrl, initialsOf(r.name)) + "</div>" +
             '<div style="flex:1;min-width:0">' +
             '<div class="celebrate-row-name">' + esc(r.name) + "</div>" +
             '<div class="celebrate-row-detail">' + esc(r.detail) + "</div>" +

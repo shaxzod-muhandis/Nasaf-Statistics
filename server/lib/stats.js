@@ -185,19 +185,44 @@ async function getEmployeeLeaderboard(monthStart, today, projectsById) {
 const STORY_KIND_LABEL_UZ = { info: "Ma'lumot beruvchi", atmospheric: "Atmosferali video" };
 
 async function getTodayFeed(today) {
-  const r = await db.query(
-    `select c.type, c.seq_number, c.done_at, c.story_kind, p.label as project_label,
-            coalesce(nullif(trim(concat(u.first_name, ' ', u.last_name)), ''), u.username) as user_name
-     from checks c
-     join project_cycles pc on pc.id = c.cycle_id
-     join projects p on p.id = pc.project_id
-     left join users u on u.id = c.done_by
-     where c.done_at is not null and (c.done_at + interval '5 hours')::date = $1::date
-     order by c.done_at desc
-     limit 20`,
-    [today],
-  );
-  return r.rows.map((row) => {
+  // Post/stories (checks) VA bajarilgan vazifalar (tasks) — 2026-11-25,
+  // egasi: lentada vazifalar ham, ularni kim bajargani (mas'ullar) ham
+  // ko'rinsin. Rasm — xodimning Tracker profilidagi avatari; yo'q
+  // bo'lsa ekranda bosh harf (standart holat) chiqadi.
+  const [checksR, tasksR] = await Promise.all([
+    db.query(
+      `select c.type, c.seq_number, c.done_at as at, c.story_kind, p.label as project_label,
+              u.avatar_url,
+              coalesce(nullif(trim(concat(u.first_name, ' ', u.last_name)), ''), u.username) as user_name
+       from checks c
+       join project_cycles pc on pc.id = c.cycle_id
+       join projects p on p.id = pc.project_id
+       left join users u on u.id = c.done_by
+       where c.done_at is not null and (c.done_at + interval '5 hours')::date = $1::date
+       order by c.done_at desc
+       limit 20`,
+      [today],
+    ),
+    db.query(
+      `select t.title, t.completed_at as at, p.label as project_label,
+              a.names, a.avatar_url
+       from tasks t
+       left join projects p on p.id = t.project_id
+       left join lateral (
+         select string_agg(coalesce(nullif(trim(concat(u.first_name, ' ', u.last_name)), ''), u.username), ', '
+                           order by ta.position) as names,
+                (array_agg(u.avatar_url order by ta.position))[1] as avatar_url
+           from task_assignees ta join users u on u.id = ta.user_id
+          where ta.task_id = t.id
+       ) a on true
+       where t.status = 'done' and t.completed_at is not null
+         and (t.completed_at + interval '5 hours')::date = $1::date
+       order by t.completed_at desc
+       limit 20`,
+      [today],
+    ),
+  ]);
+  const checks = checksR.rows.map((row) => {
     const kindLabel = row.type === "k" ? "Post" : "Stories";
     // story_kind — checks jadvalida haqiqatan bor maydon (o'ylab
     // topilmagan matn emas), stories'ni "Ma'lumot beruvchi"/"Atmosferali
@@ -205,14 +230,32 @@ async function getTodayFeed(today) {
     // ma'lumot yo'q, shunchaki raqami ko'rsatiladi.
     const kindDetail = row.type === "s" && row.story_kind ? STORY_KIND_LABEL_UZ[row.story_kind] : null;
     return {
+      kind: row.type === "k" ? "post" : "stories",
       name: row.user_name || "—",
       avatar: initials(row.user_name),
+      avatarUrl: row.avatar_url || null,
       label: `${kindLabel} #${row.seq_number}`,
       detail: kindDetail,
       projectLabel: row.project_label,
-      time: fmtTime(row.done_at),
+      at: row.at,
+      time: fmtTime(row.at),
     };
   });
+  const tasks = tasksR.rows.map((row) => ({
+    kind: "task",
+    name: row.names || "Mas'ulsiz",
+    avatar: initials(row.names),
+    avatarUrl: row.avatar_url || null,
+    label: "Vazifa",
+    detail: row.title,
+    projectLabel: row.project_label || null,
+    at: row.at,
+    time: fmtTime(row.at),
+  }));
+  return [...checks, ...tasks]
+    .sort((a, b) => new Date(b.at) - new Date(a.at))
+    .slice(0, 30)
+    .map(({ at, ...x }) => x);
 }
 
 // "Qarsak" bildirishnomasi uchun — `since`dan keyin bajarilgan post/
@@ -224,7 +267,7 @@ async function getTodayFeed(today) {
 async function getCelebrations(since) {
   const [checksR, tasksR, coinR] = await Promise.all([
     db.query(
-      `select c.type, c.seq_number, c.done_at as at, p.label as project_label, u.id as user_id,
+      `select c.type, c.seq_number, c.done_at as at, p.label as project_label, u.id as user_id, u.avatar_url,
               coalesce(nullif(trim(concat(u.first_name, ' ', u.last_name)), ''), u.username) as user_name
        from checks c
        join project_cycles pc on pc.id = c.cycle_id
@@ -236,10 +279,18 @@ async function getCelebrations(since) {
       [since],
     ),
     db.query(
-      `select t.title, t.completed_at as at, u.id as user_id,
-              coalesce(nullif(trim(concat(u.first_name, ' ', u.last_name)), ''), u.username) as user_name
+      // Mas'ullar `task_assignees` dan (bir nechta bo'lishi mumkin):
+      // ismlar vergul bilan, rasm va qo'shiq — birinchi mas'ulniki.
+      `select t.title, t.completed_at as at, a.user_id, a.avatar_url, a.user_name
        from tasks t
-       join users u on u.id = t.assignee_user_id
+       join lateral (
+         select (array_agg(u.id order by ta.position))[1] as user_id,
+                (array_agg(u.avatar_url order by ta.position))[1] as avatar_url,
+                string_agg(coalesce(nullif(trim(concat(u.first_name, ' ', u.last_name)), ''), u.username), ', '
+                           order by ta.position) as user_name
+           from task_assignees ta join users u on u.id = ta.user_id
+          where ta.task_id = t.id
+       ) a on a.user_id is not null
        where t.status = 'done' and t.completed_at is not null and t.completed_at > $1
        order by t.completed_at asc
        limit 20`,
@@ -249,7 +300,7 @@ async function getCelebrations(since) {
     // (mukofot) tabriklashga loyiq; ayirish (manfiy tuzatish) hech
     // qachon bu ro'yxatga tushmaydi.
     db.query(
-      `select t.amount, t.created_at as at, u.id as user_id,
+      `select t.amount, t.created_at as at, u.id as user_id, u.avatar_url,
               coalesce(nullif(trim(concat(u.first_name, ' ', u.last_name)), ''), u.username) as user_name
        from ncoin_transactions t
        join users u on u.id = t.user_id
@@ -265,6 +316,7 @@ async function getCelebrations(since) {
     .map((row) => ({
       name: row.user_name,
       userId: row.user_id,
+      avatarUrl: row.avatar_url || null,
       kind: row.type === "k" ? "post" : "stories",
       label: `${row.type === "k" ? "Post" : "Stories"} #${row.seq_number}`,
       detail: row.project_label,
@@ -275,6 +327,7 @@ async function getCelebrations(since) {
     .map((row) => ({
       name: row.user_name,
       userId: row.user_id,
+      avatarUrl: row.avatar_url || null,
       kind: "task",
       label: "Vazifa",
       detail: row.title,
@@ -285,6 +338,7 @@ async function getCelebrations(since) {
     .map((row) => ({
       name: row.user_name,
       userId: row.user_id,
+      avatarUrl: row.avatar_url || null,
       kind: "coin",
       label: "Ncoin",
       detail: `+${Number(row.amount)} Ncoin`,
