@@ -641,8 +641,25 @@
   // mumkin) tayanmasdan, UTC vaqtiga qo'lda +5 soat qo'shib UTC
   // getter'lari bilan o'qish.
   var lastUpdatedAt = null;
+  // Televizorning o'z soati ko'pincha noto'g'ri (vaqt mintaqasi yoki qo'lda
+  // qo'yilgan soat) — 2026-11-28, egasi: "TV soat noto'g'ri". Shuning uchun
+  // vaqt SERVERGA tenglanadi: har /api/stats javobidagi `updatedAt` bilan
+  // televizor soati orasidagi farq saqlanadi va hamma joyda qo'shiladi.
+  // So'rov davomiyligining yarmi hisobga olinadi (tarmoq kechikishi).
+  var serverOffsetMs = 0;
+  function syncServerClock(serverIso, sentAt, gotAt) {
+    var t = Date.parse(serverIso || "");
+    if (!isFinite(t)) return;
+    var mid = sentAt + (gotAt - sentAt) / 2;
+    // Juda sekin javob (>10 s) aniq emas — o'tkazib yuboriladi.
+    if (gotAt - sentAt > 10000) return;
+    serverOffsetMs = t - mid;
+  }
+  function nowMs() {
+    return Date.now() + serverOffsetMs;
+  }
   function tashkentNow() {
-    return new Date(Date.now() + 5 * 3600 * 1000);
+    return new Date(nowMs() + 5 * 3600 * 1000);
   }
   // Soat ma'lumot yangilanishiga MUTLAQO bog'liq emas — o'z taymeri
   // bilan yuradi. Lekin televizor brauzeri sahifani fonga olib qo'ysa
@@ -703,10 +720,13 @@
   // ── Stats render ──
   async function loadStats() {
     try {
+      var sentAt = Date.now();
       var res = await apiFetch("/api/stats");
+      var gotAt = Date.now();
       if (res.status === 401) return showLogin();
       var data = await res.json();
       if (!res.ok) throw new Error(data.error || "Xatolik");
+      syncServerClock(data.updatedAt, sentAt, gotAt);
       lastUpdatedAt = Date.now();
       lastData = data;
       render(data);
@@ -1376,10 +1396,13 @@
 
   async function pollCelebrations() {
     try {
-      var res = await apiFetch("/api/celebrations?since=" + encodeURIComponent(celebrateSince));
+      // Birinchi so'rov `since`siz — server o'z vaqtidan boshlaydi
+      // (televizor soati xato bo'lsa ham tabriklar yo'qolmaydi va eski
+      // hodisalar bilan to'lib ketmaydi).
+      var res = await apiFetch("/api/celebrations" + (celebrateSince ? "?since=" + encodeURIComponent(celebrateSince) : ""));
       if (!res.ok) return;
       var data = await res.json();
-      celebrateSince = data.now || new Date().toISOString();
+      celebrateSince = data.now || new Date(nowMs()).toISOString();
       (data.events || []).forEach(function (ev) {
         preloadCelebrationSound(ev.soundUrl);
         celebrateQueue.push(ev);
@@ -1391,7 +1414,7 @@
   }
 
   function initCelebrations() {
-    celebrateSince = new Date().toISOString();
+    celebrateSince = "";
     setInterval(pollCelebrations, CELEBRATE_POLL_MS);
   }
 
